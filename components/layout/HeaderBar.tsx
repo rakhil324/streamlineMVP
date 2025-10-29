@@ -3,6 +3,10 @@
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Search, Bell, MessageSquare, User, ChevronDown } from 'lucide-react';
+import Dropdown from '@/components/ui/Dropdown';
+import NotificationsDropdown from './NotificationsDropdown';
+import MessagesDropdown from './MessagesDropdown';
+import ProfileDropdown from './ProfileDropdown';
 
 interface HeaderBarProps {
   title: string;
@@ -35,26 +39,51 @@ export default function HeaderBar({ title }: HeaderBarProps) {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2 md:gap-4">
-          <button className="relative p-2 text-textSecondary hover:text-textPrimary hover:bg-gray-100 rounded-lg transition-all">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-          </button>
+          {/* Notifications */}
+          <Dropdown
+            trigger={
+              <div className="relative p-2 text-textSecondary hover:text-textPrimary hover:bg-gray-100 rounded-lg transition-all">
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              </div>
+            }
+            align="right"
+          >
+            <NotificationsDropdown />
+          </Dropdown>
           
-          <button className="relative p-2 text-textSecondary hover:text-textPrimary hover:bg-gray-100 rounded-lg transition-all">
-            <MessageSquare className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
-          </button>
+          {/* Messages */}
+          <Dropdown
+            trigger={
+              <div className="relative p-2 text-textSecondary hover:text-textPrimary hover:bg-gray-100 rounded-lg transition-all">
+                <MessageSquare className="w-5 h-5" />
+                <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+              </div>
+            }
+            align="right"
+          >
+            <MessagesDropdown />
+          </Dropdown>
 
-          <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
-              {session?.user?.image ? (
-                <img src={session.user.image} alt={session.user.name || ''} className="w-full h-full rounded-full" />
-              ) : (
-                userInitial
-              )}
-            </div>
-            <ChevronDown className="w-4 h-4 text-textSecondary" />
-          </div>
+          {/* Profile */}
+          <Dropdown
+            trigger={
+              <div className="flex items-center gap-3 pl-3 border-l border-gray-200 hover:bg-gray-50 rounded-lg p-2 transition-all">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
+                  {session?.user?.image ? (
+                    <img src={session.user.image} alt={session.user.name || ''} className="w-full h-full rounded-full" />
+                  ) : (
+                    userInitial
+                  )}
+                </div>
+                <ChevronDown className="w-4 h-4 text-textSecondary hidden md:block" />
+              </div>
+            }
+            align="right"
+            width="normal"
+          >
+            <ProfileDropdown />
+          </Dropdown>
         </div>
       </div>
     </header>
