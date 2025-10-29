@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { Search, Bell, MessageSquare, User, ChevronDown } from 'lucide-react';
 
 interface HeaderBarProps {
@@ -9,6 +10,8 @@ interface HeaderBarProps {
 
 export default function HeaderBar({ title }: HeaderBarProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const { data: session } = useSession();
+  const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
 
   return (
     <header className="fixed top-0 right-0 left-0 md:left-60 h-16 bg-white border-b border-gray-100 shadow-sm z-30">
@@ -42,9 +45,13 @@ export default function HeaderBar({ title }: HeaderBarProps) {
             <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
           </button>
 
-          <div className="flex items-center gap-3 pl-3 border-l border-gray-200 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-all">
-            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-              <User className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt={session.user.name || ''} className="w-full h-full rounded-full" />
+              ) : (
+                userInitial
+              )}
             </div>
             <ChevronDown className="w-4 h-4 text-textSecondary" />
           </div>
