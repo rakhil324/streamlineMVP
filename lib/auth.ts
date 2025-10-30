@@ -15,7 +15,7 @@ interface User {
 const users: User[] = [
   {
     id: '1',
-    email: 'demo@simplify.com',
+    email: 'demo@streamline.ai',
     name: 'Demo User',
     password: '$2a$10$rHJZvZLqYzNqYqYzNqYqYu4vZLqYzNqYqYzNqYqYzNqYqYzNqYqY', // "password123"
   },
@@ -49,10 +49,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         // Verify password (in production, use proper bcrypt comparison)
-        // For MVP demo: password123 works for demo@simplify.com
+        // For MVP demo: password123 works for demo@streamline.ai
         // For other users, compare with stored password
         const isValidPassword = 
-          (email === 'demo@simplify.com' && password === 'password123') ||
+          (email === 'demo@streamline.ai' && password === 'password123') ||
           password === user.password;
 
         if (!isValidPassword) {

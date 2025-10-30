@@ -24,7 +24,7 @@ const ExtensionPage = () => {
             <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">S</span>
             </div>
-            <span className="font-semibold text-textPrimary text-sm">Simplify</span>
+            <span className="font-semibold text-textPrimary text-sm">Streamline.ai</span>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
@@ -315,7 +315,7 @@ const ExtensionPage = () => {
       {/* Background Info Text */}
       <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
         <p className="text-sm text-textSecondary text-center">
-          This is a prototype of the Simplify Extension popup interface
+          This is a prototype of the Streamline.ai Extension popup interface
         </p>
       </div>
     </div>

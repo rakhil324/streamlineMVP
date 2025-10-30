@@ -22,7 +22,7 @@ export default function ProfilePage() {
               <div className="flex flex-wrap gap-6 text-sm">
                 <div className="flex items-center gap-2 text-textSecondary">
                   <Mail className="w-4 h-4" />
-                  <span>hriday@simplify.com</span>
+                  <span>hriday@streamline.ai</span>
                 </div>
                 <div className="flex items-center gap-2 text-textSecondary">
                   <MapPin className="w-4 h-4" />

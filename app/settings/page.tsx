@@ -10,7 +10,7 @@ export default function SettingsPage() {
   const [notifications, setNotifications] = useState(true);
   const [formData, setFormData] = useState({
     name: 'Hriday Sainathuni',
-    email: 'hriday@simplify.com',
+    email: 'hriday@streamline.ai',
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

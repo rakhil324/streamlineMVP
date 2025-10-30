@@ -4,7 +4,7 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import SessionProvider from "@/components/providers/SessionProvider";
 
 export const metadata: Metadata = {
-  title: "Simplify Dashboard",
+  title: "Streamline.ai Dashboard",
   description: "Central control center for managing job applications",
 };
 

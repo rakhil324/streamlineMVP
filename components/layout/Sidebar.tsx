@@ -46,7 +46,7 @@ export default function Sidebar() {
         {/* Logo */}
         <div className="p-6 border-b border-gray-100">
           {!isCollapsed ? (
-            <h1 className="text-2xl font-bold text-primary">Simplify</h1>
+            <h1 className="text-2xl font-bold text-primary">Streamline.ai</h1>
           ) : (
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-xl">S</span>

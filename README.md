@@ -1,4 +1,4 @@
-# Simplify Dashboard - MVP
+# Streamline.ai Dashboard - MVP
 
 A modern, lightweight, and highly visual web application that serves as the central control center for managing job applications, saved roles, and AI-assisted tools.
 

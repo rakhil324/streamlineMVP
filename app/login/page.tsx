@@ -50,7 +50,7 @@ export default function LoginPage() {
       >
         <Card className="p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-textPrimary mb-2">Simplify</h1>
+            <h1 className="text-3xl font-bold text-textPrimary mb-2">Streamline.ai</h1>
             <p className="text-textSecondary">Sign in to your account</p>
           </div>
 
@@ -123,7 +123,7 @@ export default function LoginPage() {
 
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-700">
-              <strong>Demo credentials:</strong> demo@simplify.com / password123
+              <strong>Demo credentials:</strong> demo@streamline.ai / password123
             </p>
           </div>
         </Card>

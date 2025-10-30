@@ -36,7 +36,7 @@ export default function MobileHeader() {
   return (
     <>
       <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 shadow-sm z-30 flex items-center justify-between px-4">
-        <h1 className="text-xl font-bold text-primary">Simplify</h1>
+        <h1 className="text-xl font-bold text-primary">Streamline.ai</h1>
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="p-2 text-textSecondary hover:text-textPrimary"
