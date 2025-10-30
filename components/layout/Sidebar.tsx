@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut, Puzzle } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { name: 'Tracker', icon: <CheckSquare className="w-5 h-5" />, path: '/tracker' },
   { name: 'Saved Jobs', icon: <Bookmark className="w-5 h-5" />, path: '/saved' },
   { name: 'AI Tools', icon: <Sparkles className="w-5 h-5" />, path: '/ai-tools' },
+  { name: 'Extension', icon: <Puzzle className="w-5 h-5" />, path: '/extension' },
   { name: 'Settings', icon: <Settings className="w-5 h-5" />, path: '/settings' },
 ];
 

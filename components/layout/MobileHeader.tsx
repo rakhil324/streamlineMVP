@@ -11,6 +11,7 @@ const navItems = [
   { name: 'Tracker', path: '/tracker' },
   { name: 'Saved Jobs', path: '/saved' },
   { name: 'AI Tools', path: '/ai-tools' },
+  { name: 'Extension', path: '/extension' },
   { name: 'Settings', path: '/settings' },
 ];
 
