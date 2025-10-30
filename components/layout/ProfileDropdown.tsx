@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { User, Settings, LogOut, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -13,7 +14,12 @@ interface MenuItem {
 }
 
 export default function ProfileDropdown() {
+  const { data: session } = useSession();
   const router = useRouter();
+  const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
+  const userEmail = session?.user?.email || 'user@example.com';
+  const userName = session?.user?.name || 'User';
+  
   const menuItems: MenuItem[] = [
     {
       icon: <User className="w-5 h-5" />,
@@ -27,9 +33,9 @@ export default function ProfileDropdown() {
     },
   ];
 
-  const handleLogout = () => {
-    // Handle logout logic
-    alert('Logged out successfully!');
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
+    router.push('/login');
   };
 
   return (
@@ -37,12 +43,16 @@ export default function ProfileDropdown() {
       {/* User Info */}
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
+            {session?.user?.image ? (
+              <img src={session.user.image} alt={userName} className="w-full h-full rounded-full" />
+            ) : (
+              userInitial
+            )}
           </div>
           <div>
-            <p className="text-sm font-medium text-textPrimary">Hriday Sainathuni</p>
-            <p className="text-xs text-textSecondary">hriday@simplify.com</p>
+            <p className="text-sm font-medium text-textPrimary">{userName}</p>
+            <p className="text-xs text-textSecondary">{userEmail}</p>
           </div>
         </div>
       </div>

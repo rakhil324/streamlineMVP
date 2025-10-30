@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useSession } from 'next-auth/react';
 import MainLayout from '@/components/layout/MainLayout';
 import StatCard from '@/components/ui/StatCard';
 import Button from '@/components/ui/Button';
@@ -11,6 +12,10 @@ import { FileText, Mic, Briefcase, Bookmark, Plus } from 'lucide-react';
 import { mockJobs, mockStats } from '@/lib/mockData';
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'there';
+  const firstName = userName.split(' ')[0];
+  
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
@@ -35,7 +40,7 @@ export default function DashboardPage() {
         >
           <div>
             <h2 className="text-3xl font-bold text-textPrimary mb-2">
-              Welcome back, Hriday 👋
+              Welcome back, {firstName} 👋
             </h2>
             <p className="text-textSecondary">
               Here's a quick look at your job search progress.

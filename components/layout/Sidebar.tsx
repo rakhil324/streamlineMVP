@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut, Puzzle } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -24,6 +26,17 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push('/login');
+  };
+
+  const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
+  const userEmail = session?.user?.email || 'user@example.com';
+  const userName = session?.user?.name || 'User';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-white shadow-card border-r border-gray-100 transition-all duration-300 z-40 hidden md:block ${
@@ -65,18 +78,25 @@ export default function Sidebar() {
         {/* User Section */}
         <div className="p-4 border-t border-gray-100">
           <div className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-50 transition-all cursor-pointer">
-            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-              <User className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt={userName} className="w-full h-full rounded-full" />
+              ) : (
+                userInitial
+              )}
             </div>
             {!isCollapsed && (
               <div className="flex-1">
-                <p className="text-sm font-medium text-textPrimary">Hriday Sainathuni</p>
-                <p className="text-xs text-textSecondary">hriday@simplify.com</p>
+                <p className="text-sm font-medium text-textPrimary">{userName}</p>
+                <p className="text-xs text-textSecondary">{userEmail}</p>
               </div>
             )}
           </div>
           {!isCollapsed && (
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-textSecondary hover:bg-gray-50 hover:text-red-600 transition-all mt-2">
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-textSecondary hover:bg-gray-50 hover:text-red-600 transition-all mt-2"
+            >
               <LogOut className="w-5 h-5" />
               <span className="text-sm">Sign Out</span>
             </button>

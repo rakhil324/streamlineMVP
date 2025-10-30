@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X, User, LogOut } from 'lucide-react';
@@ -18,6 +20,18 @@ const navItems = [
 export default function MobileHeader() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    router.push('/login');
+    setIsOpen(false);
+  };
+
+  const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
+  const userEmail = session?.user?.email || 'user@example.com';
+  const userName = session?.user?.name || 'User';
 
   return (
     <>
@@ -56,15 +70,22 @@ export default function MobileHeader() {
           
           <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 bg-white">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white text-sm font-medium">
+                {session?.user?.image ? (
+                  <img src={session.user.image} alt={userName} className="w-full h-full rounded-full" />
+                ) : (
+                  userInitial
+                )}
               </div>
               <div>
-                <p className="text-sm font-medium text-textPrimary">Hriday Sainathuni</p>
-                <p className="text-xs text-textSecondary">hriday@simplify.com</p>
+                <p className="text-sm font-medium text-textPrimary">{userName}</p>
+                <p className="text-xs text-textSecondary">{userEmail}</p>
               </div>
             </div>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-textSecondary hover:bg-gray-50">
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-textSecondary hover:bg-gray-50 hover:text-red-600 transition-all"
+            >
               <LogOut className="w-5 h-5" />
               <span className="text-sm">Sign Out</span>
             </button>
