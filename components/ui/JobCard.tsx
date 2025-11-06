@@ -1,4 +1,5 @@
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import Card from './Card';
 import Tag from './Tag';
 import Button from './Button';
@@ -15,9 +16,24 @@ interface JobCardProps {
   onClick?: () => void;
 }
 
-export default function JobCard({ title, company, location, type, logo, status = 'Applied', onClick }: JobCardProps) {
+export default function JobCard({ id, title, company, location, type, logo, status = 'Applied', onClick }: JobCardProps) {
+  const router = useRouter();
+
+  const handleView = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/jobs/${id}`);
+  };
+
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      router.push(`/jobs/${id}`);
+    }
+  };
+
   return (
-    <Card hover className="cursor-pointer" onClick={onClick}>
+    <Card hover className="cursor-pointer" onClick={handleCardClick}>
       <div className="flex items-start gap-4">
         {logo ? (
           <img src={logo} alt={company} className="w-12 h-12 rounded-lg object-cover" />
@@ -41,7 +57,7 @@ export default function JobCard({ title, company, location, type, logo, status =
           </div>
           <div className="flex items-center justify-between">
             <Tag label={status} variant={status === 'Offer' ? 'success' : status === 'Rejected' ? 'danger' : 'default'} />
-            <Button variant="outline" size="sm">View</Button>
+            <Button variant="outline" size="sm" onClick={handleView}>View</Button>
           </div>
         </div>
       </div>

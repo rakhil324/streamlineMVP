@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { Search, Bell, MessageSquare, User, ChevronDown } from 'lucide-react';
 import Dropdown from '@/components/ui/Dropdown';
 import NotificationsDropdown from './NotificationsDropdown';
 import MessagesDropdown from './MessagesDropdown';
 import ProfileDropdown from './ProfileDropdown';
+import SearchResults from '@/components/ui/SearchResults';
 
 interface HeaderBarProps {
   title: string;
@@ -14,8 +16,34 @@ interface HeaderBarProps {
 
 export default function HeaderBar({ title }: HeaderBarProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   const { data: session } = useSession();
+  const router = useRouter();
   const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
+
+  const handleSearch = (e?: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e && e.key === 'Enter' && searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+      setShowResults(false);
+    }
+  };
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowResults(false);
+      }
+    }
+
+    if (showResults) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showResults]);
 
   return (
     <header className="fixed top-0 right-0 left-0 md:left-60 h-16 bg-white border-b border-gray-100 shadow-sm z-30">
@@ -25,15 +53,30 @@ export default function HeaderBar({ title }: HeaderBarProps) {
 
         {/* Center: Search */}
         <div className="hidden md:flex flex-1 max-w-xl mx-4 lg:mx-8">
-          <div className="relative">
+          <div className="relative w-full" ref={searchRef}>
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-textSecondary" />
             <input
               type="text"
               placeholder="Search jobs..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowResults(e.target.value.length > 0);
+              }}
+              onFocus={() => {
+                if (searchQuery.length > 0) {
+                  setShowResults(true);
+                }
+              }}
+              onKeyDown={handleSearch}
               className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 focus:bg-white transition-all"
             />
+            {showResults && searchQuery && (
+              <SearchResults 
+                query={searchQuery} 
+                onSelect={() => setShowResults(false)}
+              />
+            )}
           </div>
         </div>
 

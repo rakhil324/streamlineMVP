@@ -6,12 +6,50 @@ import { Settings, Flag, X, Zap, Info, Eye, Briefcase, Clock, RefreshCw, Edit, C
 const ExtensionPage = () => {
   const [activeTab, setActiveTab] = useState<'autofill' | 'keywords' | 'profile'>('autofill');
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [autofillDemo, setAutofillDemo] = useState(false);
+  const [autofilledFields, setAutofilledFields] = useState<Set<string>>(new Set());
+  const [isTailoring, setIsTailoring] = useState(false);
 
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   };
+
+  const startAutofillDemo = () => {
+    setAutofillDemo(true);
+    setAutofilledFields(new Set());
+    
+    // Simulate autofilling fields one by one
+    const fields = ['name', 'email', 'phone', 'location', 'resume', 'coverLetter'];
+    fields.forEach((field, index) => {
+      setTimeout(() => {
+        setAutofilledFields(prev => {
+          const newSet = new Set(prev);
+          newSet.add(field);
+          return newSet;
+        });
+      }, (index + 1) * 500);
+    });
+  };
+
+  const handleTailorApplication = () => {
+    setIsTailoring(true);
+    setTimeout(() => {
+      setIsTailoring(false);
+      setAutofillDemo(true);
+      startAutofillDemo();
+    }, 1500);
+  };
+
+  const mockApplicationFields = [
+    { id: 'name', label: 'Full Name', value: 'Hriday Sainathuni', filled: autofilledFields.has('name') },
+    { id: 'email', label: 'Email', value: 'sainathunih@gmail.com', filled: autofilledFields.has('email') },
+    { id: 'phone', label: 'Phone', value: '+15713513185', filled: autofilledFields.has('phone') },
+    { id: 'location', label: 'Location', value: 'Ashburn, VA, USA', filled: autofilledFields.has('location') },
+    { id: 'resume', label: 'Resume', value: 'Hriday_Sainathuni_resume.pdf', filled: autofilledFields.has('resume') },
+    { id: 'coverLetter', label: 'Cover Letter', value: 'Custom tailored cover letter...', filled: autofilledFields.has('coverLetter') },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-8">
@@ -24,7 +62,7 @@ const ExtensionPage = () => {
             <div className="w-6 h-6 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">S</span>
             </div>
-            <span className="font-semibold text-textPrimary text-sm">Streamline.ai</span>
+            <span className="font-semibold text-textPrimary text-sm">Simplify</span>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
@@ -77,65 +115,157 @@ const ExtensionPage = () => {
         <div className="flex-1 overflow-y-auto scrollbar-custom">
           {activeTab === 'autofill' && (
             <div className="p-5 space-y-6">
-              {/* Status Banner */}
-              <div className="flex flex-col items-center text-center space-y-3">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-textPrimary text-sm mb-1">
-                    We support autofill on this website! Click into the application to get started.
-                  </p>
-                  <p className="text-xs text-textSecondary">
-                    We'll help you autofill and custom tailor your resume and cover letter for this application.
-                  </p>
-                </div>
-              </div>
+              {!autofillDemo ? (
+                <>
+                  {/* Status Banner */}
+                  <div className="flex flex-col items-center text-center space-y-3">
+                    <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-textPrimary text-sm mb-1">
+                        We support autofill on this website! Click into the application to get started.
+                      </p>
+                      <p className="text-xs text-textSecondary">
+                        We'll help you autofill and custom tailor your resume and cover letter for this application.
+                      </p>
+                    </div>
+                  </div>
 
-              {/* Divider */}
-              <div className="border-t border-gray-200"></div>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
 
-              {/* Help Box */}
-              <div className="bg-blue-50 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-textPrimary text-sm mb-1">Still need help?</p>
+                  {/* Help Box */}
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-textPrimary text-sm mb-1">Still need help?</p>
+                        <a href="#" className="text-primary text-sm hover:underline">
+                          Check out our tutorial here →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Actions */}
+                  <div className="space-y-3">
                     <a href="#" className="text-primary text-sm hover:underline">
-                      Check out our tutorial here →
+                      Save Job Instead
+                    </a>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-textSecondary">Get referrals →</span>
+                      <div className="flex -space-x-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="w-8 h-8 bg-primary rounded-full border-2 border-white flex items-center justify-center">
+                            <span className="text-white text-xs font-medium">U{i}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Primary Button */}
+                  <div className="pt-4">
+                    <button 
+                      onClick={handleTailorApplication}
+                      disabled={isTailoring}
+                      className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isTailoring ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Tailoring...
+                        </>
+                      ) : (
+                        <>
+                          <Edit className="w-4 h-4" />
+                          Tailor Application
+                        </>
+                      )}
+                    </button>
+                    <a href="#" className="block text-center text-xs text-textSecondary mt-2 hover:underline">
+                      View all options
                     </a>
                   </div>
-                </div>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="space-y-3">
-                <a href="#" className="text-primary text-sm hover:underline">
-                  Save Job Instead
-                </a>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-textSecondary">Get referrals →</span>
-                  <div className="flex -space-x-2">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="w-8 h-8 bg-primary rounded-full border-2 border-white flex items-center justify-center">
-                        <span className="text-white text-xs font-medium">U{i}</span>
+                </>
+              ) : (
+                <>
+                  {/* Autofill Demo */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-textPrimary text-sm">Autofill Demo</h3>
+                        <p className="text-xs text-textSecondary">Watch as we fill in your application</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                      <button
+                        onClick={() => {
+                          setAutofillDemo(false);
+                          setAutofilledFields(new Set());
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Reset
+                      </button>
+                    </div>
 
-              {/* Primary Button */}
-              <div className="pt-4">
-                <button className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:opacity-90 transition-all flex items-center justify-center gap-2">
-                  <Edit className="w-4 h-4" />
-                  Tailor Application
-                </button>
-                <a href="#" className="block text-center text-xs text-textSecondary mt-2 hover:underline">
-                  View all options
-                </a>
-              </div>
+                    {/* Mock Application Form */}
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3 border-2 border-dashed border-gray-300">
+                      <p className="text-xs font-medium text-textSecondary mb-3">Mock Application Form:</p>
+                      {mockApplicationFields.map((field) => (
+                        <div key={field.id} className="space-y-1">
+                          <label className="text-xs font-medium text-textSecondary">{field.label}</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={field.filled ? field.value : ''}
+                              readOnly
+                              className={`w-full px-3 py-2 text-sm border rounded-lg transition-all ${
+                                field.filled
+                                  ? 'border-green-500 bg-green-50'
+                                  : 'border-gray-300 bg-white'
+                              }`}
+                            />
+                            {field.filled && (
+                              <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                                <Check className="w-4 h-4 text-green-600" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Progress Indicator */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-textSecondary">Progress</span>
+                        <span className="font-medium text-textPrimary">
+                          {autofilledFields.size} / {mockApplicationFields.length} fields filled
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${(autofilledFields.size / mockApplicationFields.length) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {autofilledFields.size === mockApplicationFields.length && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-5 h-5 text-green-600" />
+                          <p className="text-sm font-medium text-green-800">
+                            Application tailored and ready to submit!
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

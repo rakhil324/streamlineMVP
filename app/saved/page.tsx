@@ -4,18 +4,39 @@ import React, { useState } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import JobCard from '@/components/ui/JobCard';
 import Button from '@/components/ui/Button';
-import { Search, Filter } from 'lucide-react';
+import Card from '@/components/ui/Card';
+import { Search, Filter, Bookmark, BookmarkCheck, Trash2 } from 'lucide-react';
 import { mockJobs } from '@/lib/mockData';
 
 export default function SavedJobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const savedJobs = mockJobs.slice(0, 6); // Mock saved jobs
+  const [savedJobs, setSavedJobs] = useState(mockJobs.slice(0, 8));
+  const [removedJobs, setRemovedJobs] = useState<Set<string>>(new Set());
 
-  const filteredJobs = savedJobs.filter(
-    job =>
+  const handleRemove = (jobId: string) => {
+    setRemovedJobs(prev => {
+      const newSet = new Set(prev);
+      newSet.add(jobId);
+      return newSet;
+    });
+    setTimeout(() => {
+      setSavedJobs(prev => prev.filter(job => job.id !== jobId));
+      setRemovedJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }, 300);
+  };
+
+  const filteredJobs = savedJobs.filter(job => {
+    if (removedJobs.has(job.id)) return false;
+    return (
       job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.location.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   return (
     <MainLayout title="Saved Jobs">
@@ -27,7 +48,7 @@ export default function SavedJobsPage() {
               Saved Jobs
             </h2>
             <p className="text-textSecondary">
-              {savedJobs.length} jobs saved
+              {filteredJobs.length} job{filteredJobs.length !== 1 ? 's' : ''} saved
             </p>
           </div>
           <div className="flex gap-3">
@@ -54,20 +75,65 @@ export default function SavedJobsPage() {
         {filteredJobs.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredJobs.map((job) => (
-              <JobCard key={job.id} {...job} />
+              <div key={job.id} className="relative group">
+                <JobCard {...job} />
+                <button
+                  onClick={() => handleRemove(job.id)}
+                  className="absolute top-4 right-4 p-2 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50"
+                  title="Remove from saved"
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 bg-white rounded-card shadow-card">
-            <p className="text-textSecondary">
-              {searchQuery 
-                ? 'No jobs match your search criteria' 
-                : 'No saved jobs yet'}
-            </p>
-          </div>
+          <Card>
+            <div className="text-center py-16">
+              {searchQuery ? (
+                <>
+                  <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-textSecondary mb-2">
+                    No jobs match your search criteria
+                  </p>
+                  <Button variant="outline" onClick={() => setSearchQuery('')}>
+                    Clear search
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Bookmark className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-textSecondary mb-2">No saved jobs yet</p>
+                  <p className="text-sm text-textSecondary mb-4">
+                    Save jobs while browsing to view them here
+                  </p>
+                  <Button variant="primary" onClick={() => window.location.href = '/search'}>
+                    Browse Jobs
+                  </Button>
+                </>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Quick Actions */}
+        {filteredJobs.length > 0 && (
+          <Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-textPrimary mb-1">Quick Actions</h3>
+                <p className="text-sm text-textSecondary">Manage your saved jobs</p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex items-center gap-2">
+                  <BookmarkCheck className="w-4 h-4" />
+                  Apply to All
+                </Button>
+              </div>
+            </div>
+          </Card>
         )}
       </div>
     </MainLayout>
   );
 }
-
