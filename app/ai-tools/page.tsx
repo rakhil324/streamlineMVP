@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { Sparkles, FileText, MessageSquare, Zap, Loader2, CheckCircle, Download, X, Play, RotateCcw, Search, Building2 } from 'lucide-react';
+import { Sparkles, FileText, MessageSquare, Zap, Loader2, CheckCircle, Download, X, Play, RotateCcw, Search, Building2, Upload, AlertCircle } from 'lucide-react';
 import { mockJobs, Job } from '@/lib/mockData';
 
 export default function AIToolsPage() {
@@ -16,6 +16,14 @@ export default function AIToolsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [generationSteps, setGenerationSteps] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [fileData, setFileData] = useState<{
+    sanitizedText: string;
+    encryptedOriginal: string;
+    encryptionKey: string;
+    removedData: any;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   interface InterviewQuestion {
     question: string;
@@ -28,6 +36,7 @@ export default function AIToolsPage() {
     coverLetter?: string;
     interviewQuestions?: InterviewQuestion[];
     selectedJobId?: string;
+    pdfBase64?: string;
   }>({});
 
   const tools = [
@@ -56,48 +65,6 @@ export default function AIToolsPage() {
       requiresJob: false,
     },
   ];
-
-  const generateJobSpecificResume = (job: Job) => {
-    return `HRIDAY SAINATHUNI
-${job.title} | ${job.company}
-
-PROFESSIONAL SUMMARY
-Experienced frontend developer with 5+ years building scalable web applications using ${job.keywords?.join(', ')}. Proven track record of delivering high-performance applications and improving user experiences. Specialized in ${job.keywords?.[0]} and modern JavaScript frameworks.
-
-TECHNICAL SKILLS
-• Frontend: ${job.keywords?.join(', ')}
-• Tools: Git, Webpack, Jest, Cypress
-• Design: Figma, Adobe XD
-
-EXPERIENCE
-Senior Frontend Developer | Tech Corp | 2022 - Present
-• Led development of major product features using ${job.keywords?.[0]}, improving user engagement by 40%
-• Architected and implemented component library using ${job.keywords?.[1]} for ${job.company}-style applications
-• Built scalable web applications serving 100K+ daily users with focus on ${job.description}
-
-Frontend Developer | Startup Inc | 2020 - 2022
-• Developed user-facing features using ${job.keywords?.[0]} and modern JavaScript frameworks
-• Collaborated with cross-functional teams to deliver features aligned with ${job.company} standards
-
-EDUCATION
-Bachelor's in Computer Science | University of Virginia | 2024 - 2027
-`;
-  };
-
-  const generateJobSpecificCoverLetter = (job: Job) => {
-    return `Dear Hiring Manager,
-
-I am writing to express my strong interest in the ${job.title} position at ${job.company}. With over 5 years of experience building scalable web applications using ${job.keywords?.join(', ')}, I am excited about the opportunity to contribute to your innovative team.
-
-In my current role, I've focused on ${job.description?.toLowerCase()}, which aligns perfectly with ${job.company}'s mission. I have extensive experience with ${job.keywords?.[0]} and ${job.keywords?.[1]}, which are essential for this role.
-
-${job.company}'s commitment to ${job.description?.toLowerCase()} resonates with my passion for creating exceptional user experiences. I am particularly drawn to your innovative approach and would be thrilled to bring my expertise in ${job.keywords?.slice(0, 2).join(' and ')} to your team.
-
-I am confident that my technical skills in ${job.keywords?.join(', ')}, combined with my collaborative approach and problem-solving mindset, would make me a valuable addition to your team. I look forward to discussing how I can contribute to ${job.company}'s continued success.
-
-Sincerely,
-Hriday Sainathuni`;
-  };
 
   const mockInterviewQuestions: InterviewQuestion[] = [
     {
@@ -152,11 +119,56 @@ Hriday Sainathuni`;
     handleGenerate(toolId, job);
   };
 
-  const handleGenerate = (toolId: string, job: Job | null) => {
+  const handleFileUpload = async (file: File) => {
+    setError(null);
+    setUploadedFile(file);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload file');
+      }
+
+      const data = await response.json();
+      setFileData({
+        sanitizedText: data.sanitizedText,
+        encryptedOriginal: data.encryptedOriginal,
+        encryptionKey: data.encryptionKey,
+        removedData: data.removedData,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload file');
+      setUploadedFile(null);
+    }
+  };
+
+  const handleGenerate = async (toolId: string, job: Job | null) => {
+    setError(null);
     setActiveTool(toolId);
     setGenerating(toolId);
     setGenerationSteps(generationStepsMap[toolId as keyof typeof generationStepsMap] || []);
     setCurrentStep(0);
+
+    // For resume and cover letter, require file upload
+    if ((toolId === 'resume' || toolId === 'cover') && !fileData) {
+      setError('Please upload a resume file first');
+      setGenerating(null);
+      return;
+    }
+
+    if ((toolId === 'resume' || toolId === 'cover') && !job) {
+      setError('Please select a job');
+      setGenerating(null);
+      return;
+    }
 
     // Simulate generation steps
     const steps = generationStepsMap[toolId as keyof typeof generationStepsMap] || [];
@@ -166,36 +178,160 @@ Hriday Sainathuni`;
       }, (index + 1) * 500);
     });
 
-    setTimeout(() => {
-      setGenerating(null);
-      setCurrentStep(0);
-      if (toolId === 'resume' && job) {
+    try {
+      if (toolId === 'resume' && job && fileData) {
+        const response = await fetch('/api/tailor/resume', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sanitizedResume: fileData.sanitizedText,
+            jobDescription: job.description || '',
+            jobTitle: job.title,
+            companyName: job.company,
+            encryptedOriginal: fileData.encryptedOriginal,
+            encryptionKey: fileData.encryptionKey,
+            removedData: fileData.removedData,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to tailor resume');
+        }
+
+        const data = await response.json();
+        setGenerating(null);
+        setCurrentStep(0);
+        
+        // Log for debugging
+        console.log('Resume API response:', { 
+          hasContent: !!data.content, 
+          hasPdf: !!data.pdf, 
+          pdfLength: data.pdf?.length || 0,
+          format: data.format,
+          error: data.error,
+          fullResponse: data
+        });
+        
         setGeneratedContent(prev => ({ 
           ...prev, 
-          resume: generateJobSpecificResume(job),
+          resume: data.content,
+          pdfBase64: data.pdf || undefined,
           selectedJobId: job.id 
         }));
-      } else if (toolId === 'cover' && job) {
+      } else if (toolId === 'cover' && job && fileData) {
+        const response = await fetch('/api/tailor/cover-letter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sanitizedResume: fileData.sanitizedText,
+            jobDescription: job.description || '',
+            jobTitle: job.title,
+            companyName: job.company,
+            encryptedOriginal: fileData.encryptedOriginal,
+            encryptionKey: fileData.encryptionKey,
+            removedData: fileData.removedData,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to tailor cover letter');
+        }
+
+        const data = await response.json();
+        setGenerating(null);
+        setCurrentStep(0);
+        
+        // Log for debugging
+        console.log('Cover letter API response:', { 
+          hasContent: !!data.content, 
+          hasPdf: !!data.pdf, 
+          pdfLength: data.pdf?.length || 0,
+          format: data.format,
+          error: data.error,
+          fullResponse: data
+        });
+        
         setGeneratedContent(prev => ({ 
           ...prev, 
-          coverLetter: generateJobSpecificCoverLetter(job),
+          coverLetter: data.content,
+          pdfBase64: data.pdf || undefined,
           selectedJobId: job.id 
         }));
       } else if (toolId === 'interview') {
-        setGeneratedContent(prev => ({ ...prev, interviewQuestions: mockInterviewQuestions }));
+        // Keep mock for interview prep for now
+        setTimeout(() => {
+          setGenerating(null);
+          setCurrentStep(0);
+          setGeneratedContent(prev => ({ ...prev, interviewQuestions: mockInterviewQuestions }));
+        }, steps.length * 500 + 500);
       }
-    }, steps.length * 500 + 500);
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate content');
+      setGenerating(null);
+      setCurrentStep(0);
+    }
+  };
+
+  const downloadPDF = (content: string, filename: string, pdfBase64?: string) => {
+    console.log('Download PDF called:', { hasPdfBase64: !!pdfBase64, filename });
+    
+    if (pdfBase64 && pdfBase64.length > 0) {
+      try {
+        // Download PDF
+        const byteCharacters = atob(pdfBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('PDF downloaded successfully');
+      } catch (error) {
+        console.error('Error downloading PDF:', error);
+        // Fallback to text
+        downloadAsText(content, filename);
+      }
+    } else {
+      console.warn('No PDF data available, downloading as text');
+      downloadAsText(content, filename);
+    }
+  };
+
+  const downloadAsText = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.replace('.pdf', '.txt');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleReset = (toolId: string) => {
     if (toolId === 'resume') {
       setGeneratedContent(prev => {
-        const { resume, selectedJobId, ...rest } = prev;
+        const { resume, selectedJobId, pdfBase64, ...rest } = prev;
         return rest;
       });
     } else if (toolId === 'cover') {
       setGeneratedContent(prev => {
-        const { coverLetter, selectedJobId, ...rest } = prev;
+        const { coverLetter, selectedJobId, pdfBase64, ...rest } = prev;
         return rest;
       });
     } else if (toolId === 'interview') {
@@ -206,6 +342,7 @@ Hriday Sainathuni`;
     }
     setActiveTool(null);
     setSelectedJob(null);
+    setError(null);
   };
 
   return (
@@ -295,6 +432,55 @@ Hriday Sainathuni`;
               </div>
             </Card>
           </div>
+        )}
+
+        {/* File Upload Section */}
+        {(activeTool === 'resume' || activeTool === 'cover' || showJobSelector === 'resume' || showJobSelector === 'cover') && (
+          <Card className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-textPrimary">Upload Resume</h3>
+              {uploadedFile && (
+                <span className="text-sm text-green-600 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  {uploadedFile.name}
+                </span>
+              )}
+            </div>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+            <div className="flex items-center gap-4">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleFileUpload(file);
+                  }
+                }}
+                className="block w-full text-sm text-textSecondary file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:opacity-90 cursor-pointer"
+              />
+              {uploadedFile && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setUploadedFile(null);
+                    setFileData(null);
+                  }}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-textSecondary mt-2">
+              Supported formats: PDF, Word (.doc, .docx), or Text (.txt). Max size: 10MB
+            </p>
+          </Card>
         )}
 
         {/* Tool Cards */}
@@ -400,17 +586,25 @@ Hriday Sainathuni`;
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    const blob = new Blob([generatedContent.resume!], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `resume-${selectedJob?.company || 'resume'}.txt`;
-                    a.click();
+                    if (!generatedContent.pdfBase64) {
+                      setError('PDF generation failed. The file will download as text. Check server logs for details.');
+                      downloadPDF(
+                        generatedContent.resume!,
+                        `resume-${selectedJob?.company || 'resume'}.pdf`,
+                        generatedContent.pdfBase64
+                      );
+                    } else {
+                      downloadPDF(
+                        generatedContent.resume!,
+                        `resume-${selectedJob?.company || 'resume'}.pdf`,
+                        generatedContent.pdfBase64
+                      );
+                    }
                   }}
                   className="flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  Download
+                  {generatedContent.pdfBase64 ? 'Download PDF' : 'Download Text (PDF Failed)'}
                 </Button>
                 <button
                   onClick={() => setActiveTool(null)}
@@ -454,17 +648,25 @@ Hriday Sainathuni`;
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    const blob = new Blob([generatedContent.coverLetter!], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `cover-letter-${selectedJob?.company || 'cover-letter'}.txt`;
-                    a.click();
+                    if (!generatedContent.pdfBase64) {
+                      setError('PDF generation failed. The file will download as text. Check server logs for details.');
+                      downloadPDF(
+                        generatedContent.coverLetter!,
+                        `cover-letter-${selectedJob?.company || 'cover-letter'}.pdf`,
+                        generatedContent.pdfBase64
+                      );
+                    } else {
+                      downloadPDF(
+                        generatedContent.coverLetter!,
+                        `cover-letter-${selectedJob?.company || 'cover-letter'}.pdf`,
+                        generatedContent.pdfBase64
+                      );
+                    }
                   }}
                   className="flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  Download
+                  {generatedContent.pdfBase64 ? 'Download PDF' : 'Download Text (PDF Failed)'}
                 </Button>
                 <button
                   onClick={() => setActiveTool(null)}
