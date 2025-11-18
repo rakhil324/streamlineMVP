@@ -2149,6 +2149,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Also listen for custom autofill event (dispatched by background script)
+document.addEventListener('simplifyAutofill', async (event) => {
+  console.log('Greenhouse: Received simplifyAutofill event', event.detail);
+  
+  try {
+    // Get autofill data from storage
+    const storageKey = event.detail?.storageKey;
+    if (storageKey) {
+      const result = await chrome.storage.local.get(storageKey);
+      const autofillData = result[storageKey];
+      
+      if (autofillData) {
+        console.log('Greenhouse: Got autofill data from storage, starting autofill');
+        await autofillForm();
+        
+        // Store result back
+        await chrome.storage.local.set({
+          [`autofill_result_${storageKey}`]: {
+            success: true,
+            filledCount: 1 // Placeholder, actual count tracked in autofillForm
+          }
+        });
+      } else {
+        console.warn('Greenhouse: No autofill data found in storage for key:', storageKey);
+      }
+    } else {
+      // No storage key, just trigger autofill directly
+      console.log('Greenhouse: Triggering autofill directly (no storage key)');
+      await autofillForm();
+    }
+  } catch (error) {
+    console.error('Greenhouse: Error in simplifyAutofill event handler:', error);
+  }
+});
+
 function init() {
   console.log('Streamline: Greenhouse content script loaded and ready');
   // On-page button removed - autofill is now triggered only from the extension popup
