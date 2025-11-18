@@ -904,20 +904,50 @@ function isStandardProfileField(field, profile) {
 // Generate answer based on resume content (simple keyword matching)
 async function generateLLMAnswer(questionText, jobInfo, resumeData) {
   try {
+    if (!questionText) {
+      console.log('No question text provided');
+      return '';
+    }
+    
+    console.log('Generating AI answer for question:', questionText.substring(0, 100));
+    
+    // Call AI API through background script
+    const response = await chrome.runtime.sendMessage({
+      action: 'generateAnswer',
+      question: questionText,
+      jobDescription: jobInfo.jobDescription || '',
+      jobTitle: jobInfo.jobTitle || '',
+      companyName: jobInfo.companyName || ''
+    });
+    
+    if (response.success && response.answer) {
+      console.log('AI generated answer (first 100 chars):', response.answer.substring(0, 100));
+      return response.answer;
+    } else {
+      console.warn('AI answer generation failed, using fallback:', response.error);
+      // Fallback to simple keyword-based answer
+      return generateFallbackAnswer(questionText, jobInfo, resumeData);
+    }
+    
+  } catch (error) {
+    console.error('Error generating AI answer:', error);
+    // Fallback to simple keyword-based answer
+    return generateFallbackAnswer(questionText, jobInfo, resumeData);
+  }
+}
+
+// Fallback answer generation (simple keyword matching)
+function generateFallbackAnswer(questionText, jobInfo, resumeData) {
+  try {
     if (!resumeData || !questionText) {
-      console.log('No resume data or question text provided');
       return '';
     }
     
     const question = questionText.toLowerCase();
     const resume = resumeData.toLowerCase();
     
-    // Simple keyword-based answer generation
-    // Check what the question is asking about and extract relevant info from resume
-    
     // Experience-related questions
     if (question.includes('experience') || question.includes('worked on') || question.includes('previous role')) {
-      // Extract sentences containing experience keywords
       const experienceKeywords = ['developed', 'built', 'created', 'managed', 'led', 'worked', 'implemented', 'designed'];
       const sentences = resumeData.split(/[.!?]+/).filter(s => s.trim().length > 20);
       const relevantSentences = sentences.filter(s => 
@@ -960,12 +990,9 @@ async function generateLLMAnswer(questionText, jobInfo, resumeData) {
       }
     }
     
-    // Default: return a generic response based on the resume
-    console.log('Using generic answer for question:', questionText.substring(0, 50));
-    return '';  // Return empty for unhandled questions to avoid generic filler
-    
+    return '';  // Return empty for unhandled questions
   } catch (error) {
-    console.error('Error generating answer:', error);
+    console.error('Error in fallback answer generation:', error);
     return '';
   }
 }
@@ -2017,6 +2044,34 @@ async function autofillForm() {
     
     if (filledCount > 0) {
       showNotification(`Successfully filled ${filledCount} field(s): ${filledFields.join(', ')}`, 'success');
+      
+      // Automatically save job to application tracker
+      if (jobInfo.jobTitle && jobInfo.companyName) {
+        try {
+          console.log('Streamline: Saving job to application tracker...');
+          const saveResponse = await chrome.runtime.sendMessage({
+            action: 'saveJob',
+            jobInfo: {
+              title: jobInfo.jobTitle,
+              company: jobInfo.companyName,
+              location: jobInfo.location || '',
+              description: jobInfo.jobDescription || '',
+              jobUrl: window.location.href
+            }
+          });
+          
+          if (saveResponse.success) {
+            console.log('Streamline: Job saved to tracker successfully');
+            showNotification(`Application submitted and tracked!`, 'success');
+          } else {
+            console.warn('Streamline: Failed to save job to tracker:', saveResponse.error);
+            // Don't show error to user - this is a secondary feature
+          }
+        } catch (saveError) {
+          console.warn('Streamline: Error saving job to tracker:', saveError);
+          // Don't show error to user - this is a secondary feature
+        }
+      }
     } else {
       showNotification('No matching fields found to fill.', 'warning');
     }

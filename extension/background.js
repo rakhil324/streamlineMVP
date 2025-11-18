@@ -91,6 +91,20 @@ async function handleMessage(message, sender, sendResponse) {
         await handleApplicationLog(message.data);
         sendResponse({ success: true });
         return;
+      
+      case 'generateAnswer':
+        // Generate AI answer for essay questions
+        generateAnswer(message.question, message.jobDescription, message.jobTitle, message.companyName)
+          .then(answer => sendResponse({ success: true, answer }))
+          .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // Keep channel open for async
+      
+      case 'saveJob':
+        // Save job to application tracker
+        saveJob(message.jobInfo)
+          .then(job => sendResponse({ success: true, job }))
+          .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // Keep channel open for async
 
       case 'SYNC_PROFILE':
         handleProfileSync(message.data).then(syncResult => {
@@ -738,5 +752,91 @@ if (chrome.alarms) {
   chrome.alarms.create('syncPendingLogs', { periodInMinutes: 5 });
 } else {
   console.warn('chrome.alarms API not available. Periodic sync disabled.');
+}
+
+/**
+ * Generate AI answer for essay questions
+ */
+async function generateAnswer(question, jobDescription, jobTitle, companyName) {
+  try {
+    const response = await fetch('http://localhost:3000/api/tailor/answer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        question,
+        jobDescription,
+        jobTitle,
+        companyName,
+      }),
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Not authenticated. Please log in to the web app at http://localhost:3000 first.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate answer');
+    }
+    
+    const data = await response.json();
+    return data.answer;
+  } catch (error) {
+    console.error('Error generating answer:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save job to application tracker
+ */
+async function saveJob(jobInfo) {
+  try {
+    const { title, company, location, description, jobUrl } = jobInfo;
+    
+    if (!title || !company) {
+      throw new Error('Title and company are required');
+    }
+    
+    // Get current tab URL if jobUrl not provided
+    let currentUrl = jobUrl;
+    if (!currentUrl) {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length > 0 && tabs[0].url) {
+        currentUrl = tabs[0].url;
+      }
+    }
+    
+    const response = await fetch('http://localhost:3000/api/jobs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        title,
+        company,
+        location: location || '',
+        description: description ? description.substring(0, 1000) : '',
+        jobUrl: currentUrl || '',
+      }),
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Not authenticated. Please log in to the web app at http://localhost:3000 first.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save job');
+    }
+    
+    const data = await response.json();
+    return data.job;
+  } catch (error) {
+    console.error('Error saving job:', error);
+    throw error;
+  }
 }
 
