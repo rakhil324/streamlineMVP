@@ -913,7 +913,7 @@ async function generateLLMAnswer(questionText, jobInfo, resumeData) {
     
     // Call AI API through background script
     const response = await chrome.runtime.sendMessage({
-      action: 'generateAnswer',
+      type: 'generateAnswer',
       question: questionText,
       jobDescription: jobInfo.jobDescription || '',
       jobTitle: jobInfo.jobTitle || '',
@@ -2050,7 +2050,7 @@ async function autofillForm() {
         try {
           console.log('Streamline: Saving job to application tracker...');
           const saveResponse = await chrome.runtime.sendMessage({
-            action: 'saveJob',
+            type: 'saveJob',
             jobInfo: {
               title: jobInfo.jobTitle,
               company: jobInfo.companyName,
