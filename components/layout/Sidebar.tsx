@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, CheckSquare, Sparkles, Settings, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Sparkles, Settings, User, LogOut, Puzzle } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { name: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, path: '/' },
   { name: 'Tracker', icon: <CheckSquare className="w-5 h-5" />, path: '/tracker' },
   { name: 'AI Tools', icon: <Sparkles className="w-5 h-5" />, path: '/ai-tools' },
+  { name: 'Extension', icon: <Puzzle className="w-5 h-5" />, path: '/extension' },
   { name: 'Settings', icon: <Settings className="w-5 h-5" />, path: '/settings' },
 ];
 

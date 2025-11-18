@@ -2084,63 +2084,40 @@ function showNotification(message, type = 'info') {
   }, 5000);
 }
 
-// Create autofill button
-function createAutofillButton() {
-  // Remove existing button if it exists
+// Remove any old autofill buttons that might exist
+function removeOldAutofillButton() {
   const existing = document.getElementById('streamline-autofill-button');
-  if (existing) existing.remove();
-  
-  // Create button
-  const button = document.createElement('button');
-  button.id = 'streamline-autofill-button';
-  button.textContent = '🚀 Autofill with Streamline';
-  button.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 24px;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 10000;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    transition: all 0.2s;
-  `;
-  
-  button.onmouseover = () => {
-    button.style.background = '#2563eb';
-    button.style.transform = 'scale(1.05)';
-  };
-  button.onmouseout = () => {
-    button.style.background = '#3b82f6';
-    button.style.transform = 'scale(1)';
-  };
-  
-  button.onclick = () => {
-    button.textContent = '⏳ Filling...';
-    button.disabled = true;
-    autofillForm().finally(() => {
-      button.textContent = '🚀 Autofill with Streamline';
-      button.disabled = false;
-    });
-  };
-  
-  document.body.appendChild(button);
+  if (existing) {
+    existing.remove();
+  }
 }
+
+// Listen for messages from popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'autofill') {
+    console.log('Streamline: Autofill requested from popup');
+    autofillForm()
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error('Streamline: Autofill error:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true; // Keep channel open for async response
+  }
+});
 
 // Initialize when page loads
 function init() {
   console.log('Streamline: Content script loaded');
   
-  // Wait a bit for page to be ready
+  // Remove any old autofill buttons
+  removeOldAutofillButton();
+  
+  // Also remove any old buttons that might be created later
   setTimeout(() => {
-    createAutofillButton();
-    console.log('Streamline: Autofill button created');
+    removeOldAutofillButton();
   }, 1000);
 }
 
@@ -2150,11 +2127,10 @@ if (document.readyState === 'loading') {
   init();
 }
 
-// Re-create button if page content changes (for SPAs)
+// Remove old buttons if page content changes (for SPAs)
 const observer = new MutationObserver(() => {
-  if (!document.getElementById('streamline-autofill-button')) {
-    setTimeout(createAutofillButton, 500);
-  }
+  // Remove any old autofill buttons that might be recreated
+  removeOldAutofillButton();
 });
 
 if (document.body) {

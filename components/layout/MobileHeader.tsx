@@ -11,6 +11,7 @@ const navItems = [
   { name: 'Dashboard', path: '/' },
   { name: 'Tracker', path: '/tracker' },
   { name: 'AI Tools', path: '/ai-tools' },
+  { name: 'Extension', path: '/extension' },
   { name: 'Settings', path: '/settings' },
 ];
 
