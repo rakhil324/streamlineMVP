@@ -901,16 +901,71 @@ function isStandardProfileField(field, profile) {
   return false;
 }
 
-// Generate LLM-based answer via API (currently disabled in this setup)
+// Generate answer based on resume content (simple keyword matching)
 async function generateLLMAnswer(questionText, jobInfo, resumeData) {
   try {
-    // LLM-based answer generation is not available in the current setup
-    // This would require the backend API at http://localhost:3000/api/tailor/answer
-    // For now, return empty string to skip LLM-based fields
-    console.log('LLM answer generation not available, skipping question:', questionText);
-    return '';
+    if (!resumeData || !questionText) {
+      console.log('No resume data or question text provided');
+      return '';
+    }
+    
+    const question = questionText.toLowerCase();
+    const resume = resumeData.toLowerCase();
+    
+    // Simple keyword-based answer generation
+    // Check what the question is asking about and extract relevant info from resume
+    
+    // Experience-related questions
+    if (question.includes('experience') || question.includes('worked on') || question.includes('previous role')) {
+      // Extract sentences containing experience keywords
+      const experienceKeywords = ['developed', 'built', 'created', 'managed', 'led', 'worked', 'implemented', 'designed'];
+      const sentences = resumeData.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      const relevantSentences = sentences.filter(s => 
+        experienceKeywords.some(kw => s.toLowerCase().includes(kw))
+      ).slice(0, 3);
+      
+      if (relevantSentences.length > 0) {
+        return relevantSentences.join('. ').trim() + '.';
+      }
+    }
+    
+    // Skills-related questions
+    if (question.includes('skill') || question.includes('proficient') || question.includes('technical')) {
+      const skillKeywords = ['python', 'javascript', 'react', 'java', 'c++', 'sql', 'aws', 'docker', 'git'];
+      const foundSkills = skillKeywords.filter(skill => resume.includes(skill));
+      
+      if (foundSkills.length > 0) {
+        return `I have experience with ${foundSkills.join(', ')} and have used these technologies in various projects.`;
+      }
+    }
+    
+    // Why this company/role questions
+    if (question.includes('why') && (question.includes('company') || question.includes('role') || question.includes('position'))) {
+      const company = jobInfo.companyName || 'your company';
+      const role = jobInfo.jobTitle || 'this position';
+      return `I am excited about the opportunity to join ${company} as a ${role}. My background and skills align well with the requirements, and I am eager to contribute to the team's success.`;
+    }
+    
+    // Strengths/achievements questions
+    if (question.includes('strength') || question.includes('achievement') || question.includes('accomplish')) {
+      const sentences = resumeData.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      const achievementSentences = sentences.filter(s => {
+        const lower = s.toLowerCase();
+        return lower.includes('led') || lower.includes('increased') || lower.includes('improved') || 
+               lower.includes('achieved') || lower.includes('developed');
+      }).slice(0, 2);
+      
+      if (achievementSentences.length > 0) {
+        return achievementSentences.join('. ').trim() + '.';
+      }
+    }
+    
+    // Default: return a generic response based on the resume
+    console.log('Using generic answer for question:', questionText.substring(0, 50));
+    return '';  // Return empty for unhandled questions to avoid generic filler
+    
   } catch (error) {
-    console.error('Error generating LLM answer:', error);
+    console.error('Error generating answer:', error);
     return '';
   }
 }
@@ -2095,13 +2150,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function init() {
-  console.log('Streamline: Content script loaded');
-  
-  // Wait a bit for page to be ready
-  setTimeout(() => {
-    createAutofillButton();
-    console.log('Streamline: Autofill button created');
-  }, 1000);
+  console.log('Streamline: Greenhouse content script loaded and ready');
+  // On-page button removed - autofill is now triggered only from the extension popup
 }
 
 if (document.readyState === 'loading') {
@@ -2111,30 +2161,5 @@ if (document.readyState === 'loading') {
 }
 
 // Re-create button if page content changes (for SPAs)
-const observer = new MutationObserver(() => {
-  if (!document.getElementById('streamline-autofill-button')) {
-    setTimeout(createAutofillButton, 500);
-  }
-});
-
-if (document.body) {
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-} else {
-  // Wait for body to exist
-  const bodyObserver = new MutationObserver(() => {
-    if (document.body) {
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-      bodyObserver.disconnect();
-    }
-  });
-  bodyObserver.observe(document.documentElement, {
-    childList: true,
-  });
-}
+// Note: On-page button functionality removed - autofill is triggered from extension popup only
 
