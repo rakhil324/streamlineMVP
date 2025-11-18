@@ -134,7 +134,10 @@ export default function AIToolsPage() {
     handleGenerate(toolId, job);
   };
 
-  // Fetch profile documents on mount
+  // Track if we've auto-loaded the resume to show a notification
+  const [autoLoadedResume, setAutoLoadedResume] = useState(false);
+
+  // Fetch profile documents on mount and automatically use profile resume if available
   useEffect(() => {
     fetchProfileDocuments();
   }, []);
@@ -152,12 +155,32 @@ export default function AIToolsPage() {
             encryptionKey: data.resume.encryptionKey,
             removedData: data.resume.removedData,
           });
+          
+          // AUTOMATIC: Use profile resume if available and no file has been uploaded
+          // Check both state variables to ensure we don't override user's manual upload
+          if (!uploadedFile && !fileData) {
+            setUseProfileResume(true);
+            setFileData({
+              sanitizedText: data.resume.sanitizedText,
+              encryptedOriginal: data.resume.encryptedOriginal,
+              encryptionKey: data.resume.encryptionKey,
+              removedData: data.resume.removedData,
+            });
+            setAutoLoadedResume(true);
+            // Clear the notification after 5 seconds
+            setTimeout(() => setAutoLoadedResume(false), 5000);
+          }
         }
         if (data.coverLetter) {
           setProfileCoverLetter({
             fileName: data.coverLetter.fileName,
             content: data.coverLetter.content,
           });
+          
+          // AUTOMATIC: Use profile cover letter if available and no file has been uploaded
+          if (!uploadedCoverLetterFile && !coverLetterContent) {
+            setUseProfileCoverLetter(true);
+          }
         }
       }
     } catch (err) {
@@ -560,6 +583,15 @@ export default function AIToolsPage() {
                 </span>
               )}
             </div>
+            
+            {/* Auto-loaded notification */}
+            {autoLoadedResume && useProfileResume && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700 text-sm">
+                <CheckCircle className="w-4 h-4" />
+                <span>Resume automatically loaded from your profile</span>
+              </div>
+            )}
+            
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
                 <AlertCircle className="w-4 h-4" />
@@ -571,7 +603,7 @@ export default function AIToolsPage() {
             {profileResume && (
               <div className="mb-3">
                 <Button
-                  variant={useProfileResume ? "default" : "outline"}
+                  variant={useProfileResume ? "primary" : "outline"}
                   size="sm"
                   onClick={handleUseProfileResume}
                   className="w-full"
@@ -627,7 +659,7 @@ export default function AIToolsPage() {
             {profileCoverLetter && (
               <div className="mb-3">
                 <Button
-                  variant={useProfileCoverLetter ? "default" : "outline"}
+                  variant={useProfileCoverLetter ? "primary" : "outline"}
                   size="sm"
                   onClick={handleUseProfileCoverLetter}
                   className="w-full"
