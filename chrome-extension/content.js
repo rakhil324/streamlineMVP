@@ -80,10 +80,9 @@ function findFormFields() {
   const inputs = document.querySelectorAll('input, select, textarea');
   
   inputs.forEach((input) => {
-    // Skip hidden, submit, button, checkbox, and radio inputs (but include file inputs)
+    // Skip hidden, submit, button, and radio inputs (but include file inputs and checkboxes)
     if (input.type === 'hidden' || input.type === 'submit' || 
-        input.type === 'button' || input.type === 'checkbox' || 
-        input.type === 'radio') {
+        input.type === 'button' || input.type === 'radio') {
       return;
     }
     
@@ -1233,6 +1232,93 @@ async function tailorCoverLetter(resumeData, coverLetterData, jobInfo) {
   }
 }
 
+// Find and check relocation checkbox by searching page for text
+function findAndCheckRelocationCheckbox() {
+  // Search for the specific phrase "are you willing to relocate" (case-insensitive)
+  const searchPhrase = 'are you willing to relocate';
+  const searchPhraseLower = searchPhrase.toLowerCase();
+  
+  // Walk through all text nodes in the document
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    null,
+    false
+  );
+  
+  let textNode;
+  let foundTextElement = null;
+  
+  while (textNode = walker.nextNode()) {
+    const text = textNode.textContent || '';
+    if (text.toLowerCase().includes(searchPhraseLower)) {
+      foundTextElement = textNode.parentElement;
+      console.log('Streamline: Found relocation text:', text.substring(0, 100));
+      break;
+    }
+  }
+  
+  if (!foundTextElement) {
+    console.log('Streamline: Could not find relocation text on page');
+    return false;
+  }
+  
+  // Find the nearest checkbox to this text element
+  // Search in the same container and nearby containers
+  let container = foundTextElement;
+  let checkbox = null;
+  
+  // First, try to find checkbox in the same container
+  for (let i = 0; i < 10 && container; i++) {
+    checkbox = container.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      console.log('Streamline: Found checkbox in same container');
+      break;
+    }
+    container = container.parentElement;
+  }
+  
+  // If not found, search nearby elements (siblings, parent's siblings)
+  if (!checkbox) {
+    let current = foundTextElement;
+    for (let i = 0; i < 5 && current; i++) {
+      // Check siblings
+      let sibling = current.previousElementSibling;
+      let count = 0;
+      while (sibling && count < 5) {
+        checkbox = sibling.querySelector('input[type="checkbox"]');
+        if (checkbox) break;
+        sibling = sibling.previousElementSibling;
+        count++;
+      }
+      if (checkbox) break;
+      
+      sibling = current.nextElementSibling;
+      count = 0;
+      while (sibling && count < 5) {
+        checkbox = sibling.querySelector('input[type="checkbox"]');
+        if (checkbox) break;
+        sibling = sibling.nextElementSibling;
+        count++;
+      }
+      if (checkbox) break;
+      
+      current = current.parentElement;
+    }
+  }
+  
+  if (checkbox) {
+    console.log('Streamline: Found relocation checkbox, checking it');
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+    checkbox.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    return true;
+  } else {
+    console.log('Streamline: Found relocation text but no nearby checkbox');
+    return false;
+  }
+}
+
 // Main autofill function
 async function autofillForm() {
   try {
@@ -1250,6 +1336,18 @@ async function autofillForm() {
       return;
     }
     
+    // Fill fields
+    let filledCount = 0;
+    const filledFields = [];
+    
+    // Find and check relocation checkbox first (by searching page for text)
+    const relocationChecked = findAndCheckRelocationCheckbox();
+    if (relocationChecked) {
+      filledCount++;
+      filledFields.push('Relocation checkbox');
+      console.log('Streamline: Successfully checked relocation checkbox');
+    }
+    
     // Find all form fields
     const fields = findFormFields();
     
@@ -1257,10 +1355,6 @@ async function autofillForm() {
       showNotification('No form fields found on this page.', 'warning');
       return;
     }
-    
-    // Fill fields
-    let filledCount = 0;
-    const filledFields = [];
     let resumeFile = null;
     let coverLetterFile = null;
     
@@ -1391,8 +1485,12 @@ async function autofillForm() {
         field.element.getAttribute('aria-controls') ||
         field.element.getAttribute('aria-owns')
       );
+      const isCheckbox = field.element.type === 'checkbox';
       
       if (isWorkAuthorizationQuestion(field) || isCountryField(field) || isCustomSelect || isNativeSelect) {
+        dropdownFields.push(field);
+      } else if (isCheckbox) {
+        // Handle checkboxes separately
         dropdownFields.push(field);
       } else {
         regularFields.push(field);
@@ -1657,6 +1755,79 @@ async function autofillForm() {
         return;
       }
       
+      // Handle checkbox fields
+      if (field.element.type === 'checkbox') {
+        // Skip relocation checkboxes - they're handled separately by findAndCheckRelocationCheckbox()
+        const questionText = field.label || '';
+        const allIdentifiers = field.identifiers?.join(' ') || '';
+        const allText = (questionText + ' ' + allIdentifiers).toLowerCase();
+        
+        // Skip if this is a relocation checkbox (already handled)
+        if (allText.includes('relocate') || 
+            allText.includes('willing to move') || 
+            allText.includes('willing to relocate') ||
+            allText.includes('are you willing') ||
+            allText.includes('would you be willing')) {
+          console.log('Streamline: Skipping relocation checkbox (already handled)');
+          return;
+        }
+        
+        // For other checkbox questions, use LLM to determine answer
+        // Use the best available text (label or identifiers)
+        const checkboxQuestionText = questionText || allIdentifiers || '';
+        
+        // Skip if question text is too short
+        if (!checkboxQuestionText || checkboxQuestionText.length < 5) {
+          console.log('Streamline: Skipping checkbox with short/no label:', checkboxQuestionText);
+          return;
+        }
+        
+        try {
+          console.log('Streamline: Generating LLM answer for checkbox:', checkboxQuestionText);
+          
+          // Get resume data for LLM
+          const resumeResponse = await chrome.runtime.sendMessage({ action: 'fetchResumeData' });
+          if (!resumeResponse.success) {
+            console.log('Streamline: Could not fetch resume data, skipping LLM answer for checkbox');
+            return;
+          }
+          
+          // Generate LLM answer for this checkbox question
+          const answer = await generateLLMAnswer(checkboxQuestionText, jobInfo, resumeResponse.data);
+          console.log('Streamline: Generated LLM answer for checkbox:', answer.substring(0, 100));
+          
+          // Parse answer to determine if checkbox should be checked
+          // Look for positive indicators (yes, true, check, etc.)
+          const answerLower = answer.toLowerCase().trim();
+          const shouldCheck = answerLower.includes('yes') || 
+                             answerLower.includes('true') || 
+                             answerLower.includes('check') ||
+                             answerLower.startsWith('y') ||
+                             (answerLower.length < 10 && (answerLower === 'yes' || answerLower === 'y' || answerLower === 'true'));
+          
+          if (shouldCheck) {
+            field.element.checked = true;
+            field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            field.element.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+            filledCount++;
+            filledFields.push(field.label);
+            console.log('Streamline: Checked checkbox based on LLM answer:', field.label);
+          } else {
+            // Leave unchecked if LLM says no
+            field.element.checked = false;
+            field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            filledCount++;
+            filledFields.push(field.label);
+            console.log('Streamline: Left checkbox unchecked based on LLM answer:', field.label);
+          }
+        } catch (error) {
+          console.error('Streamline: Error processing checkbox with LLM:', field.label, error);
+          // Continue with other fields even if one fails
+        }
+        
+        return;
+      }
+      
       const match = matchFieldToProfile(field, profile);
       if (match) {
         console.log('Streamline: Matched field', {
@@ -1679,11 +1850,82 @@ async function autofillForm() {
             if (filled) {
               filledCount++;
               filledFields.push(field.label);
-            }
+          }
         } else if (fillField(field.element, match.value)) {
           // Regular text input or textarea
           filledCount++;
           filledFields.push(field.label);
+        }
+      } else {
+        // No profile match - fill remaining dropdowns with "Yes"
+        if (isNativeSelect || isCustomSelect) {
+          console.log('Streamline: No profile match for dropdown, filling with "Yes":', field.label);
+          const targetValue = 'Yes';
+          
+          if (isNativeSelect) {
+            // Native select - try to find "Yes" option
+            const options = Array.from(field.element.options);
+            const targetLower = targetValue.toLowerCase();
+            
+            // Try exact match first
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === targetLower;
+            });
+            
+            // If no exact match, try single letter (y)
+            if (!targetOption) {
+              targetOption = options.find(opt => {
+                const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+                return optText === 'y';
+              });
+            }
+            
+            // Fallback to includes matching
+            if (!targetOption) {
+              targetOption = options.find(opt => {
+                const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+                return optText.includes(targetLower) || targetLower.includes(optText);
+              });
+            }
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.selectedIndex = Array.from(field.element.options).indexOf(targetOption);
+              
+              // Trigger events
+              field.element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              
+              // Trigger React/other framework updates
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(field.element, targetOption.value);
+              }
+              
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              
+              // Force focus/blur to trigger validation
+              field.element.focus();
+              field.element.blur();
+              
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled dropdown with "Yes" (native select):', field.label);
+            } else {
+              console.log('Streamline: Could not find "Yes" option for dropdown (native select):', field.label);
+            }
+          } else if (isCustomSelect) {
+            // Custom React Select - use fillDropdownField
+            const filled = await fillDropdownField(field.element, targetValue, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled dropdown with "Yes" (React Select):', field.label);
+            } else {
+              console.log('Streamline: Failed to fill dropdown with "Yes" (React Select):', field.label);
+            }
+          }
         }
       }
     };
