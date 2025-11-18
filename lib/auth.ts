@@ -1,28 +1,20 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-
-// Mock user database (in production, replace with real database)
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  password: string; // Hashed password
-}
-
-// In-memory user store (replace with database in production)
-const users: User[] = [
-  {
-    id: '1',
-    email: 'demo@streamline.ai',
-    name: 'Demo User',
-    password: '$2a$10$rHJZvZLqYzNqYqYzNqYqYu4vZLqYzNqYqYzNqYqYzNqYqYzNqYqY', // "password123"
-  },
-];
+import { prisma } from './prisma';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  adapter: PrismaAdapter(prisma),
   providers: [
+    // Google OAuth
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    // Email/Password Credentials
     Credentials({
       credentials: {
         email: { label: 'Email', type: 'email' },
@@ -42,18 +34,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const { email, password } = parsedCredentials.data;
 
-        // Find user
-        const user = users.find((u) => u.email === email);
-        if (!user) {
+        // Find user in database
+        const user = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (!user || !user.password) {
           return null;
         }
 
-        // Verify password (in production, use proper bcrypt comparison)
-        // For MVP demo: password123 works for demo@streamline.ai
-        // For other users, compare with stored password
-        const isValidPassword = 
-          (email === 'demo@streamline.ai' && password === 'password123') ||
-          password === user.password;
+        // Verify password with bcrypt
+        const isValidPassword = await bcrypt.compare(password, user.password);
 
         if (!isValidPassword) {
           return null;
@@ -63,6 +54,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
+          image: user.image,
         };
       },
     }),
@@ -74,28 +66,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: 'jwt',
   },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
   secret: process.env.AUTH_SECRET || 'your-secret-key-change-in-production',
 });
 
-// Helper functions for user management (add to database in production)
-export async function createUser(email: string, name: string, password: string): Promise<User | null> {
+// Helper functions for user management
+export async function createUser(email: string, name: string, password: string) {
   // Check if user already exists
-  if (users.find((u) => u.email === email)) {
-    return null;
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (existingUser) {
+    throw new Error('User already exists');
   }
 
-  // Hash password (in production, use: await bcrypt.hash(password, 10))
-  const hashedPassword = password; // For MVP, store plain text (DON'T DO THIS IN PRODUCTION)
+  // Hash password with bcrypt
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  const newUser: User = {
-    id: String(users.length + 1),
-    email,
-    name,
-    password: hashedPassword,
-  };
+  // Create user in database
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      password: hashedPassword,
+    },
+  });
 
-  users.push(newUser);
-  return newUser;
+  return user;
+}
+
+export async function getUserById(id: string) {
+  return await prisma.user.findUnique({
+    where: { id },
+    include: {
+      profile: true,
+    },
+  });
 }
 
 declare module 'next-auth' {
