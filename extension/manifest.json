@@ -1,0 +1,95 @@
+{
+  "manifest_version": 3,
+  "name": "Simplify Apply",
+  "version": "1.0.0",
+  "description": "Chrome extension that helps students apply to jobs faster by detecting and autofilling job application forms",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "identity",
+    "tabs",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://localhost:*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.workday.com/*",
+        "*://*.myworkdayjobs.com/*",
+        "*://*.greenhouse.io/*",
+        "*://*.jobs.lever.co/*",
+        "*://*.lever.co/*"
+      ],
+      "js": [
+        "content-scripts/form-detector.js",
+        "content-scripts/ats-detector.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "*://*.workday.com/*",
+        "*://*.myworkdayjobs.com/*"
+      ],
+      "js": ["content-scripts/workday.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.greenhouse.io/*"
+      ],
+      "js": ["content-scripts/greenhouse.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.jobs.lever.co/*",
+        "*://*.lever.co/*"
+      ],
+      "js": ["content-scripts/lever.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Simplify Apply",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["popup/*", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  }
+}
+

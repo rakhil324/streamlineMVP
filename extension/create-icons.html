@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Icon Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    canvas {
+      border: 1px solid #ddd;
+      margin: 10px;
+      display: block;
+    }
+    button {
+      padding: 10px 20px;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:hover {
+      background: #4f46e5;
+    }
+    .instructions {
+      background: #eff6ff;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simplify Extension Icon Generator</h1>
+    <div class="instructions">
+      <p><strong>Instructions:</strong></p>
+      <ol>
+        <li>Click "Generate Icons" button below</li>
+        <li>Icons will be generated as canvases</li>
+        <li>Right-click each icon and "Save image as..."</li>
+        <li>Save them in the <code>icons/</code> folder with these names:
+          <ul>
+            <li><code>icon16.png</code></li>
+            <li><code>icon32.png</code></li>
+            <li><code>icon48.png</code></li>
+            <li><code>icon128.png</code></li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+    
+    <button onclick="generateIcons()">Generate Icons</button>
+    <button onclick="downloadAllIcons()" style="background: #10b981; margin-left: 10px;">Download All Icons</button>
+    
+    <div id="icons"></div>
+  </div>
+
+  <script>
+    let canvases = {};
+    
+    function generateIcons() {
+      const sizes = [16, 32, 48, 128];
+      const container = document.getElementById('icons');
+      container.innerHTML = '<h2>Generated Icons - Click "Download All Icons" or right-click each to save:</h2>';
+      
+      sizes.forEach(size => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        canvas.style.width = size * 4 + 'px';
+        canvas.style.height = size * 4 + 'px';
+        canvas.style.imageRendering = 'pixelated';
+        
+        const ctx = canvas.getContext('2d');
+        
+        // Background color (Simplify primary)
+        ctx.fillStyle = '#6366f1';
+        ctx.fillRect(0, 0, size, size);
+        
+        // White "S" letter
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${size * 0.6}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('S', size / 2, size / 2);
+        
+        // Store canvas for download
+        canvases[size] = canvas;
+        
+        const label = document.createElement('div');
+        label.textContent = `icon${size}.png (${size}x${size})`;
+        label.style.marginTop = '5px';
+        label.style.fontWeight = 'bold';
+        
+        // Download button for individual icon
+        const downloadBtn = document.createElement('button');
+        downloadBtn.textContent = `Download icon${size}.png`;
+        downloadBtn.style.cssText = 'padding: 5px 10px; margin: 5px; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer;';
+        downloadBtn.onclick = () => downloadIcon(size);
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.display = 'inline-block';
+        wrapper.style.margin = '10px';
+        wrapper.style.textAlign = 'center';
+        wrapper.style.verticalAlign = 'top';
+        wrapper.appendChild(canvas);
+        wrapper.appendChild(label);
+        wrapper.appendChild(downloadBtn);
+        
+        container.appendChild(wrapper);
+      });
+    }
+    
+    function downloadIcon(size) {
+      const canvas = canvases[size];
+      if (!canvas) return;
+      
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `icon${size}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+    
+    function downloadAllIcons() {
+      const sizes = [16, 32, 48, 128];
+      sizes.forEach((size, index) => {
+        setTimeout(() => downloadIcon(size), index * 200);
+      });
+    }
+    
+    // Auto-generate on load
+    window.onload = generateIcons;
+  </script>
+</body>
+</html>
+
