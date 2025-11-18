@@ -901,25 +901,17 @@ function isStandardProfileField(field, profile) {
   return false;
 }
 
-// Generate LLM-based answer via API
+// Generate LLM-based answer via API (currently disabled in this setup)
 async function generateLLMAnswer(questionText, jobInfo, resumeData) {
   try {
-    const response = await chrome.runtime.sendMessage({
-      action: 'generateAnswer',
-      question: questionText,
-      jobDescription: jobInfo.jobDescription,
-      jobTitle: jobInfo.jobTitle || 'Position',
-      companyName: jobInfo.companyName || 'Company',
-    });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to generate answer');
-    }
-    
-    return response.answer;
+    // LLM-based answer generation is not available in the current setup
+    // This would require the backend API at http://localhost:3000/api/tailor/answer
+    // For now, return empty string to skip LLM-based fields
+    console.log('LLM answer generation not available, skipping question:', questionText);
+    return '';
   } catch (error) {
     console.error('Error generating LLM answer:', error);
-    throw error;
+    return '';
   }
 }
 
@@ -1032,44 +1024,54 @@ async function fillFileField(element, resumeFile) {
   }
 }
 
-// Fetch resume file from API (via background script to handle CORS)
+// Fetch resume file from profile config
 async function fetchResumeFile() {
   try {
-    // Request resume file from background script
-    const response = await chrome.runtime.sendMessage({ action: 'fetchResumeFile' });
+    // Request profile data to get resume
+    const response = await chrome.runtime.sendMessage({ type: 'REQUEST_PROFILE_DATA' });
     
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch resume file');
+    if (!response.success || !response.data) {
+      throw new Error('Failed to fetch profile data');
     }
     
-    // Reconstruct File from buffer
-    const buffer = new Uint8Array(response.buffer).buffer;
-    const blob = new Blob([buffer], { type: response.fileType || 'text/plain' });
-    const file = new File([blob], response.fileName, { type: response.fileType || 'text/plain' });
+    const profile = response.data;
     
-    return file;
+    // If resume is a chrome-extension:// URL or File URL
+    if (profile.resume || profile.resumeUrl) {
+      const resumeUrl = profile.resume || profile.resumeUrl;
+      
+      // Fetch the resume file
+      const fetchResponse = await fetch(resumeUrl);
+      if (!fetchResponse.ok) {
+        throw new Error(`Failed to fetch resume: ${fetchResponse.statusText}`);
+      }
+      
+      const blob = await fetchResponse.blob();
+      const filename = resumeUrl.split('/').pop() || 'resume.pdf';
+      const file = new File([blob], filename, { type: blob.type || 'application/pdf' });
+      
+      return file;
+    } else if (profile.resumeText) {
+      // If only text is available, create a text file
+      const blob = new Blob([profile.resumeText], { type: 'text/plain' });
+      const file = new File([blob], 'resume.txt', { type: 'text/plain' });
+      return file;
+    } else {
+      throw new Error('No resume file or text found in profile');
+    }
   } catch (error) {
     console.error('Error fetching resume file:', error);
     throw error;
   }
 }
 
-// Fetch cover letter file from API (via background script to handle CORS)
+// Fetch cover letter file from profile config (optional)
 async function fetchCoverLetterFile() {
   try {
-    // Request cover letter file from background script
-    const response = await chrome.runtime.sendMessage({ action: 'fetchCoverLetterFile' });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to fetch cover letter file');
-    }
-    
-    // Reconstruct File from buffer
-    const buffer = new Uint8Array(response.buffer).buffer;
-    const blob = new Blob([buffer], { type: response.fileType || 'text/plain' });
-    const file = new File([blob], response.fileName, { type: response.fileType || 'text/plain' });
-    
-    return file;
+    // For now, cover letter is not supported in the hardcoded profile
+    // You can add a coverLetter field to profile-config.js if needed
+    console.log('Cover letter not configured in profile');
+    return null;
   } catch (error) {
     console.error('Error fetching cover letter file:', error);
     throw error;
@@ -1178,57 +1180,26 @@ function extractJobInfo() {
 // Tailor resume using API
 async function tailorResume(resumeData, jobInfo) {
   try {
-    console.log('Streamline: Tailoring resume...');
-    const response = await chrome.runtime.sendMessage({
-      action: 'tailorResume',
-      resumeData: resumeData,
-      jobInfo: jobInfo
-    });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to tailor resume');
-    }
-    
-    // Convert PDF base64 to File
-    const pdfBase64 = response.pdf;
-    const pdfBytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const file = new File([blob], 'tailored-resume.pdf', { type: 'application/pdf' });
-    
-    console.log('Streamline: Resume tailored successfully');
-    return file;
+    console.log('Streamline: Resume tailoring not available in current setup');
+    // Tailoring requires the backend API which is not available
+    // Return null to use the original resume file instead
+    return null;
   } catch (error) {
     console.error('Error tailoring resume:', error);
-    throw error;
+    return null;
   }
 }
 
 // Tailor cover letter using API
 async function tailorCoverLetter(resumeData, coverLetterData, jobInfo) {
   try {
-    console.log('Streamline: Tailoring cover letter...');
-    const response = await chrome.runtime.sendMessage({
-      action: 'tailorCoverLetter',
-      resumeData: resumeData,
-      coverLetterData: coverLetterData,
-      jobInfo: jobInfo
-    });
-    
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to tailor cover letter');
-    }
-    
-    // Convert PDF base64 to File
-    const pdfBase64 = response.pdf;
-    const pdfBytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const file = new File([blob], 'tailored-cover-letter.pdf', { type: 'application/pdf' });
-    
-    console.log('Streamline: Cover letter tailored successfully');
-    return file;
+    console.log('Streamline: Cover letter tailoring not available in current setup');
+    // Tailoring requires the backend API which is not available
+    // Return null to skip cover letter
+    return null;
   } catch (error) {
     console.error('Error tailoring cover letter:', error);
-    throw error;
+    return null;
   }
 }
 
@@ -1322,17 +1293,17 @@ function findAndCheckRelocationCheckbox() {
 // Main autofill function
 async function autofillForm() {
   try {
-    // Request profile data from background script
-    const response = await chrome.runtime.sendMessage({ action: 'fetchProfile' });
+    // Request profile data from background script (uses extension/utils/profile-config.js)
+    const response = await chrome.runtime.sendMessage({ type: 'REQUEST_PROFILE_DATA' });
     
     if (!response.success) {
-      showNotification('Error: ' + response.error, 'error');
+      showNotification('Error: Unable to load profile data', 'error');
       return;
     }
     
-    const profile = response.profile;
+    const profile = response.data;
     if (!profile) {
-      showNotification('No profile data found. Please upload a resume in your profile.', 'error');
+      showNotification('No profile data found. Please check your profile configuration.', 'error');
       return;
     }
     
@@ -1403,13 +1374,10 @@ async function autofillForm() {
     if (resumeFields.length > 0) {
       try {
         console.log('Streamline: Resume field(s) detected, fetching resume data...');
-        // Get resume data for tailoring
-        const resumeResponse = await chrome.runtime.sendMessage({ action: 'fetchResumeData' });
-        if (resumeResponse.success) {
-          resumeData = resumeResponse.data;
-          originalResumeFile = await fetchResumeFile();
-          console.log('Streamline: Resume data fetched');
-        }
+        // Get resume text from profile for tailoring
+        resumeData = profile.resumeText || '';
+        originalResumeFile = await fetchResumeFile();
+        console.log('Streamline: Resume data fetched from profile');
       } catch (error) {
         console.error('Streamline: Failed to fetch resume data:', error);
         showNotification('Warning: Could not fetch resume. ' + error.message, 'warning');
@@ -1785,16 +1753,16 @@ async function autofillForm() {
         try {
           console.log('Streamline: Generating LLM answer for checkbox:', checkboxQuestionText);
           
-          // Get resume data for LLM
-          const resumeResponse = await chrome.runtime.sendMessage({ action: 'fetchResumeData' });
-          if (!resumeResponse.success) {
+          // Get resume data from profile
+          const resumeData = profile.resumeText || '';
+          if (!resumeData) {
             console.log('Streamline: Could not fetch resume data, skipping LLM answer for checkbox');
             return;
           }
           
           // Generate LLM answer for this checkbox question
-          const answer = await generateLLMAnswer(checkboxQuestionText, jobInfo, resumeResponse.data);
-          console.log('Streamline: Generated LLM answer for checkbox:', answer.substring(0, 100));
+          const answer = await generateLLMAnswer(checkboxQuestionText, jobInfo, resumeData);
+          console.log('Streamline: Generated LLM answer for checkbox:', answer ? answer.substring(0, 100) : 'none');
           
           // Parse answer to determine if checkbox should be checked
           // Look for positive indicators (yes, true, check, etc.)
@@ -1962,16 +1930,16 @@ async function autofillForm() {
         console.log('Streamline: Generating LLM answer for:', questionText);
         showNotification('Generating answer...', 'info');
         
-        // Get resume data for LLM
-        const resumeResponse = await chrome.runtime.sendMessage({ action: 'fetchResumeData' });
-        if (!resumeResponse.success) {
+        // Get resume data from profile
+        const resumeData = profile.resumeText || '';
+        if (!resumeData) {
           console.log('Streamline: Could not fetch resume data, skipping LLM answer');
           continue;
         }
         
         // Generate LLM answer for this question
-        const answer = await generateLLMAnswer(questionText, jobInfo, resumeResponse.data);
-        console.log('Streamline: Generated LLM answer:', answer.substring(0, 100));
+        const answer = await generateLLMAnswer(questionText, jobInfo, resumeData);
+        console.log('Streamline: Generated LLM answer:', answer ? answer.substring(0, 100) : 'none');
         
         // Fill the field if we have an answer (and it's not empty)
         if (answer && answer.trim() !== '') {
