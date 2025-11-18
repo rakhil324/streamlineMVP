@@ -1,0 +1,67 @@
+import React from 'react';
+import { useRouter } from 'next/navigation';
+import Card from './Card';
+import Tag from './Tag';
+import Button from './Button';
+import { Briefcase, MapPin, Building2 } from 'lucide-react';
+
+interface JobCardProps {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  type: string;
+  logo?: string;
+  status?: string;
+  onClick?: () => void;
+}
+
+export default function JobCard({ id, title, company, location, type, logo, status = 'Applied', onClick }: JobCardProps) {
+  const router = useRouter();
+
+  const handleView = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/jobs/${id}`);
+  };
+
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      router.push(`/jobs/${id}`);
+    }
+  };
+
+  return (
+    <Card hover className="cursor-pointer" onClick={handleCardClick}>
+      <div className="flex items-start gap-4">
+        {logo ? (
+          <img src={logo} alt={company} className="w-12 h-12 rounded-lg object-cover" />
+        ) : (
+          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+            <Building2 className="w-6 h-6 text-textSecondary" />
+          </div>
+        )}
+        <div className="flex-1">
+          <h3 className="font-semibold text-textPrimary mb-1">{title}</h3>
+          <p className="text-sm text-textSecondary mb-2">{company}</p>
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="flex items-center gap-1 text-xs text-textSecondary">
+              <MapPin className="w-3 h-3" />
+              <span>{location}</span>
+            </div>
+            <div className="flex items-center gap-1 text-xs text-textSecondary">
+              <Briefcase className="w-3 h-3" />
+              <span>{type}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <Tag label={status} variant={status === 'Offer' ? 'success' : status === 'Rejected' ? 'danger' : 'default'} />
+            <Button variant="outline" size="sm" onClick={handleView}>View</Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
