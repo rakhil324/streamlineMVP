@@ -33,7 +33,6 @@
     <!-- Tab Navigation -->
     <div class="tabs">
       <button class="tab-button active" data-tab="autofill">Autofill</button>
-      <button class="tab-button" data-tab="keywords">Keywords Score</button>
       <button class="tab-button" data-tab="profile">Profile</button>
     </div>
 
@@ -85,44 +84,6 @@
           <a href="#" class="secondary-link">View all options</a>
         </div>
 
-      </div>
-
-      <!-- Keywords Tab -->
-      <div class="tab-content" id="keywords-tab">
-        <div class="section">
-          <label>Resume</label>
-          <div class="select-group">
-            <select class="select-input" id="resumeSelect">
-              <option id="resumeOption">Loading...</option>
-            </select>
-            <button class="icon-button" id="viewResumeBtn" title="View Resume">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-              <div class="score-card">
-                <div class="score-header">
-                  <h3>Keyword Match</h3>
-                  <span class="badge badge-warning" id="keywordsScoreBadge">Not Calculated</span>
-                </div>
-                <p class="score-text" id="keywordsScoreText">
-                  Click "Calculate Keywords Score" to analyze your resume against this job posting.
-                </p>
-                <div id="matchedKeywords"></div>
-          <div class="tip-box">
-            <span class="tip-icon">💡</span>
-            <p>Try to get your score above 70% to increase your chances!</p>
-          </div>
-        </div>
-
-        <div class="action-buttons">
-          <button class="primary-button" id="calculateKeywordsBtn">Calculate Keywords Score</button>
-          <button class="secondary-button">Tailor Resume</button>
-        </div>
       </div>
 
       <!-- Profile Tab -->

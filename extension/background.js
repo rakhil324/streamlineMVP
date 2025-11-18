@@ -146,6 +146,14 @@ async function handleMessage(message, sender, sendResponse) {
         });
         return; // Keep channel open for async
 
+      case 'FETCH_FILE':
+        handleFetchFile(message.data).then(result => {
+          sendResponse(result);
+        }).catch(error => {
+          sendResponse({ success: false, error: error.message });
+        });
+        return true; // Keep channel open for async
+
       default:
         sendResponse({ success: false, error: 'Unknown message type' });
         return;
@@ -218,12 +226,28 @@ async function handleAutofillRequest(tabId, data) {
 
   // Get profile data - try storage first, then hardcoded profile
   let profileData = await storageManager.getProfileData();
+  console.log('Profile data from storage:', {
+    hasData: !!profileData,
+    hasExperience: !!profileData?.experience,
+    experienceCount: profileData?.experience?.length || 0,
+    hasEducation: !!profileData?.education,
+    educationCount: profileData?.education?.length || 0,
+    hasResume: !!profileData?.resume
+  });
   
   // If no profile in storage or missing required fields, use hardcoded profile
   if (!profileData || (!profileData.email && !profileData.phone && !profileData.location)) {
     console.log('No profile in storage, using hardcoded profile for autofill');
     try {
       profileData = await getProfileFromConfig();
+      console.log('Hardcoded profile retrieved:', {
+        hasData: !!profileData,
+        hasExperience: !!profileData?.experience,
+        experienceCount: profileData?.experience?.length || 0,
+        hasEducation: !!profileData?.education,
+        educationCount: profileData?.education?.length || 0,
+        hasResume: !!profileData?.resume
+      });
       // Save it to storage for future use
       if (profileData) {
         await storageManager.setProfileData(profileData);
@@ -257,16 +281,36 @@ async function handleAutofillRequest(tabId, data) {
   }
 
   // Prepare autofill data with proper field mappings
+  // Handle resume - prefer resumeUrl, then resume, then create a default if none exists
+  let resumeData = profileData.resume || profileData.resumeUrl || null;
+  
+  // If resume is null but we have a demo profile, use default resume URL
+  if (!resumeData && profileData.source === 'hardcoded') {
+    resumeData = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+    console.log('Using default demo resume URL');
+  }
+  
   const autofillData = {
     firstName: profileData.firstName || profileData.name?.split(' ')[0] || '',
     lastName: profileData.lastName || profileData.name?.split(' ').slice(1).join(' ') || '',
     email: profileData.email || '',
     phone: profileData.phone || '',
     location: profileData.location || '',
-    resume: profileData.resume || null,
+    experience: profileData.experience || [],
+    education: profileData.education || [],
+    resume: resumeData,
     resumeText: profileData.resumeText || null,
     coverLetter: profileData.coverLetter || null,
   };
+  
+  console.log('Prepared autofill data:', {
+    ...autofillData,
+    experienceCount: autofillData.experience?.length || 0,
+    educationCount: autofillData.education?.length || 0,
+    hasResume: !!autofillData.resume,
+    resumeType: typeof autofillData.resume,
+    resumeValue: typeof autofillData.resume === 'string' ? autofillData.resume.substring(0, 50) : 'not a string'
+  });
 
   console.log('Sending autofill data to tab:', tabId, typeof tabId, autofillData);
 
@@ -554,6 +598,48 @@ async function handleProfileSync(data) {
 async function checkAuthentication() {
   const result = await chrome.storage.local.get(['isAuthenticated', 'authToken']);
   return result.isAuthenticated === true && result.authToken;
+}
+
+/**
+ * Handle file fetch request (to avoid CORS issues in content scripts)
+ */
+async function handleFetchFile(data) {
+  try {
+    const { url } = data;
+    if (!url) {
+      return { success: false, error: 'No URL provided' };
+    }
+
+    console.log('Fetching file from URL:', url);
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
+    }
+
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64 in chunks to avoid stack overflow for large files
+    let binaryString = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      binaryString += String.fromCharCode.apply(null, chunk);
+    }
+    const base64 = btoa(binaryString);
+    
+    return {
+      success: true,
+      data: base64,
+      mimeType: blob.type || 'application/pdf',
+      size: blob.size
+    };
+  } catch (error) {
+    console.error('Error fetching file:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 /**

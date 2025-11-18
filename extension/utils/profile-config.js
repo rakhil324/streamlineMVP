@@ -47,8 +47,9 @@ export const PROFILE_CONFIG = {
         duration: '2020 – 2022',
       },
     ],
-    resume: null,
+    resume: chrome.runtime.getURL('Updated_Hriday_Sainathuni_Resume_2025.pdf'), // Local extension resume
     resumeText: null,
+    resumeUrl: chrome.runtime.getURL('Updated_Hriday_Sainathuni_Resume_2025.pdf'), // Alternative resume URL
     authenticated: true,
   },
 };

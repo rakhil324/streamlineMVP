@@ -71,8 +71,6 @@ async function initializePopup() {
   
   // Check current tab and initialize other features
   checkCurrentTab();
-  initKeywordsScore();
-  loadResumeSelector();
   
   // Force enable autofill button if we have hardcoded profile
   setTimeout(async () => {
@@ -137,30 +135,6 @@ async function initializePopup() {
     }
   });
   
-  // Update keywords score when switching to keywords tab
-  const keywordsTab = document.querySelector('[data-tab="keywords"]');
-  if (keywordsTab) {
-    keywordsTab.addEventListener('click', () => {
-      // Recalculate when switching to keywords tab
-      setTimeout(() => {
-        calculateKeywordsScore();
-        const calcBtn = document.querySelector('#calculateKeywordsBtn');
-        if (calcBtn) {
-          calcBtn.textContent = 'Recalculate Score';
-        }
-      }, 100);
-    });
-  }
-  
-  // Add event listener for calculate keywords button
-  const calcKeywordsBtn = document.getElementById('calculateKeywordsBtn');
-  if (calcKeywordsBtn) {
-    calcKeywordsBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      calculateKeywordsScore();
-    });
-  }
   
   // Add event listeners for buttons (both from HTML and dynamically created)
   const syncBtn = document.getElementById('syncProfileBtn');
@@ -1501,227 +1475,6 @@ async function openDashboard() {
 }
 
 /**
- * Calculate keywords score
- */
-async function calculateKeywordsScore() {
-  try {
-    // Get current tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs && tabs.length > 0 ? tabs[0] : null;
-    
-    if (!tab || !tab.id || typeof tab.id !== 'number') {
-      alert('Unable to access current tab');
-      return;
-    }
-
-    // Get profile data
-    const profileResponse = await chrome.runtime.sendMessage({ type: 'REQUEST_PROFILE_DATA' });
-    const profile = profileResponse?.data;
-
-    if (!profile || !profile.resume) {
-      // Show toast instead of alert
-      const toast = document.createElement('div');
-      toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #f59e0b;
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 14px;
-        z-index: 1000;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      `;
-      toast.textContent = 'Please sync your profile with a resume first';
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-      return;
-    }
-
-    // Extract job description from page
-    let jobDescription;
-    try {
-      if (!tab.id || typeof tab.id !== 'number') {
-        throw new Error('Invalid tab ID');
-      }
-      
-      jobDescription = await extractJobDescription(tab.id);
-    } catch (error) {
-      console.error('Error extracting job description:', error);
-      alert('Unable to extract job description from this page');
-      return;
-    }
-
-    if (!jobDescription || !jobDescription.jobDescription) {
-      alert('Unable to extract job description from this page');
-      return;
-    }
-
-    // Calculate keywords match
-    const score = await calculateScore(profile.resume, jobDescription.jobDescription);
-    
-    // Update UI with score
-    updateKeywordsScoreUI(score);
-  } catch (error) {
-    console.error('Error calculating keywords score:', error);
-    alert('Failed to calculate keywords score. Please try again.');
-  }
-}
-
-/**
- * Calculate score between resume and job description
- */
-async function calculateScore(resumeText, jobDescription) {
-  // Simple keyword matching algorithm
-  const jobKeywords = extractKeywords(jobDescription);
-  const resumeTextLower = resumeText.toLowerCase();
-  
-  let matches = 0;
-  const matchedKeywords = [];
-  
-  jobKeywords.forEach(keyword => {
-    if (resumeTextLower.includes(keyword.toLowerCase())) {
-      matches++;
-      matchedKeywords.push(keyword);
-    }
-  });
-
-  const score = jobKeywords.length > 0 
-    ? Math.round((matches / jobKeywords.length) * 100)
-    : 0;
-
-  return {
-    score,
-    matched: matches,
-    total: jobKeywords.length,
-    matchedKeywords,
-    allKeywords: jobKeywords,
-  };
-}
-
-/**
- * Extract keywords from text
- */
-function extractKeywords(text) {
-  // Common stop words to exclude
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'been', 'be',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
-    'may', 'might', 'must', 'can', 'could', 'this', 'that', 'these', 'those',
-    'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
-  ]);
-
-  // Extract words (3+ characters, alphanumeric)
-  const words = text.toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(word => word.length >= 3 && !stopWords.has(word));
-
-  // Get unique words
-  return [...new Set(words)].slice(0, 50); // Top 50 keywords
-}
-
-/**
- * Update keywords score UI
- */
-function updateKeywordsScoreUI(scoreData) {
-  const scoreText = document.querySelector('#keywordsScoreText');
-  const scoreBadge = document.querySelector('#keywordsScoreBadge');
-  const matchedKeywordsEl = document.querySelector('#matchedKeywords');
-  
-  if (scoreData.error) {
-    if (scoreText) {
-      scoreText.innerHTML = `<span style="color: #dc2626;">${scoreData.error}</span>`;
-    }
-    if (scoreBadge) {
-      scoreBadge.className = 'badge badge-warning';
-      scoreBadge.textContent = 'Error';
-    }
-    return;
-  }
-  
-  if (scoreText) {
-    if (scoreData.total === 0) {
-      scoreText.innerHTML = `Job description not detected. Please visit the job posting page.`;
-    } else {
-      scoreText.innerHTML = `
-        Your resume has <strong>${scoreData.matched} out of ${scoreData.total} (${scoreData.score}%)</strong> keywords that appear in the job description.
-      `;
-    }
-  }
-
-  if (scoreBadge) {
-    let badgeClass = 'badge-warning';
-    let badgeText = 'Needs Work';
-    
-    if (scoreData.score >= 70) {
-      badgeClass = 'badge-success';
-      badgeText = 'Great Match';
-    } else if (scoreData.score >= 50) {
-      badgeClass = 'badge-info';
-      badgeText = 'Good Match';
-    }
-    
-    scoreBadge.className = `badge ${badgeClass}`;
-    scoreBadge.textContent = badgeText;
-  }
-
-  if (matchedKeywordsEl) {
-    if (scoreData.matchedKeywords && scoreData.matchedKeywords.length > 0) {
-      matchedKeywordsEl.innerHTML = `
-        <div style="margin-top: 12px;">
-          <strong>Matched Keywords:</strong>
-          <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
-            ${scoreData.matchedKeywords.slice(0, 20).map(kw => 
-              `<span style="padding: 4px 8px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-size: 12px;">${kw}</span>`
-            ).join('')}
-          </div>
-        </div>
-      `;
-    } else {
-      matchedKeywordsEl.innerHTML = '';
-    }
-  }
-}
-
-/**
- * Initialize keywords score when tab is opened (automatic calculation)
- */
-async function initKeywordsScore() {
-  try {
-    // Get current tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tab || !tab.url) return;
-
-    const hostname = new URL(tab.url).hostname.toLowerCase();
-    const isSupported = 
-      hostname.includes('workday.com') ||
-      hostname.includes('myworkdayjobs.com') ||
-      hostname.includes('greenhouse.io') ||
-      hostname.includes('lever.co');
-
-    if (isSupported) {
-      // Auto-calculate keywords score
-      setTimeout(() => {
-        calculateKeywordsScore();
-      }, 500); // Small delay to ensure page is loaded
-      
-      // Also calculate when switching to keywords tab
-      const calcBtn = document.querySelector('#calculateKeywordsBtn');
-      if (calcBtn) {
-        calcBtn.addEventListener('click', calculateKeywordsScore);
-      }
-    }
-  } catch (error) {
-    console.error('Error initializing keywords score:', error);
-  }
-}
-
-/**
  * View resume functionality
  */
 async function viewResume() {
@@ -1772,45 +1525,12 @@ async function viewResume() {
   }
 }
 
-/**
- * Load resume selector dropdown
- */
-async function loadResumeSelector() {
-  try {
-    const select = document.getElementById('resumeSelect');
-    if (!select) return;
-
-    chrome.runtime.sendMessage({ type: 'REQUEST_PROFILE_DATA' }, (profileResponse) => {
-      if (chrome.runtime.lastError) {
-        console.error('Error loading resume selector:', chrome.runtime.lastError);
-        select.innerHTML = '<option value="none">No resume uploaded</option>';
-        return;
-      }
-      
-      const profile = profileResponse?.success ? profileResponse.data : profileResponse?.data;
-      
-      if (profile && profile.resume) {
-        const resumeName = profile.resume.name || profile.resume || 'Current Resume';
-        select.innerHTML = `<option value="current">${resumeName}</option>`;
-      } else {
-        select.innerHTML = '<option value="none">No resume uploaded</option>';
-      }
-    });
-  } catch (error) {
-    console.error('Error loading resume selector:', error);
-    const select = document.getElementById('resumeSelect');
-    if (select) {
-      select.innerHTML = '<option value="none">No resume uploaded</option>';
-    }
-  }
-}
 
 // Assign functions to window for inline onclick handlers in HTML
 // These must be assigned after functions are defined
 window.copyToClipboard = copyToClipboard;
 window.openDashboard = openDashboard;
 window.syncProfile = syncProfile;
-window.calculateKeywordsScore = calculateKeywordsScore;
 window.viewResume = viewResume;
 
 // Helper function to open login page (force login for syncing)
