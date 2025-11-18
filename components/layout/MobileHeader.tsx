@@ -9,11 +9,8 @@ import { Menu, X, User, LogOut } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', path: '/' },
-  { name: 'Job Search', path: '/search' },
   { name: 'Tracker', path: '/tracker' },
-  { name: 'Saved Jobs', path: '/saved' },
   { name: 'AI Tools', path: '/ai-tools' },
-  { name: 'Extension', path: '/extension' },
   { name: 'Settings', path: '/settings' },
 ];
 

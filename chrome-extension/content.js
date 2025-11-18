@@ -1989,12 +1989,47 @@ async function autofillForm() {
     
     if (filledCount > 0) {
       showNotification(`Successfully filled ${filledCount} field(s): ${filledFields.join(', ')}`, 'success');
+      
+      // Save job to tracker if we have job info
+      if (jobInfo.jobTitle && jobInfo.companyName) {
+        try {
+          await saveJobToTracker(jobInfo);
+        } catch (error) {
+          console.error('Streamline: Error saving job to tracker:', error);
+          // Don't show error to user - job saving is secondary
+        }
+      }
     } else {
       showNotification('No matching fields found to fill.', 'warning');
     }
   } catch (error) {
     console.error('Autofill error:', error);
     showNotification('Error: ' + error.message, 'error');
+  }
+}
+
+// Save job to tracker via background script
+async function saveJobToTracker(jobInfo) {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'saveJob',
+      jobInfo: {
+        title: jobInfo.jobTitle,
+        company: jobInfo.companyName,
+        location: '', // Could extract from page if needed
+        description: jobInfo.jobDescription ? jobInfo.jobDescription.substring(0, 500) : '', // Brief description (first 500 chars)
+        jobUrl: window.location.href,
+      },
+    });
+    
+    if (response.success) {
+      console.log('Streamline: Job saved to tracker:', response.job);
+    } else {
+      throw new Error(response.error || 'Failed to save job');
+    }
+  } catch (error) {
+    console.error('Streamline: Error saving job:', error);
+    throw error;
   }
 }
 

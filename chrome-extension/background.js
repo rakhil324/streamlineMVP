@@ -79,6 +79,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
+  
+  if (request.action === 'saveJob') {
+    saveJob(request.jobInfo)
+      .then(job => sendResponse({ success: true, job }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 // Fetch resume file from API
@@ -365,6 +372,55 @@ async function fetchProfileData() {
     return data.profile;
   } catch (error) {
     console.error('Error fetching profile:', error);
+    throw error;
+  }
+}
+
+// Save job to tracker
+async function saveJob(jobInfo) {
+  try {
+    const { title, company, location, description, jobUrl } = jobInfo;
+    
+    if (!title || !company) {
+      throw new Error('Title and company are required');
+    }
+    
+    // Get current tab URL if jobUrl not provided
+    let currentUrl = jobUrl;
+    if (!currentUrl) {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length > 0 && tabs[0].url) {
+        currentUrl = tabs[0].url;
+      }
+    }
+    
+    const response = await fetch('http://localhost:3000/api/jobs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Include cookies for session
+      body: JSON.stringify({
+        title,
+        company,
+        location: location || '',
+        description: description ? description.substring(0, 1000) : '', // Limit description to 1000 chars
+        jobUrl: currentUrl || '',
+      }),
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Not authenticated. Please log in to the web app at http://localhost:3000 first.');
+      }
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save job');
+    }
+    
+    const data = await response.json();
+    return data.job;
+  } catch (error) {
+    console.error('Error saving job:', error);
     throw error;
   }
 }

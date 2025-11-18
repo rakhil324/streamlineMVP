@@ -23,10 +23,8 @@ export default function HeaderBar({ title }: HeaderBarProps) {
   const userInitial = session?.user?.name?.charAt(0).toUpperCase() || 'U';
 
   const handleSearch = (e?: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e && e.key === 'Enter' && searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
-      setShowResults(false);
-    }
+    // Search functionality removed - search page no longer exists
+    // Results are shown in the dropdown only
   };
 
   useEffect(() => {
