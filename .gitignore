@@ -44,3 +44,6 @@ dev.db-journal
 .env
 .env.temp
 .env.sqlite.example
+
+# user documents storage
+.user-documents/
