@@ -371,33 +371,60 @@ function showJobDescriptionUI() {
       button.style.pointerEvents = 'auto';
       button.disabled = false;
       
-      button.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-        </svg>
-        <span>Tailor Resume for This Job</span>
-      `;
-      
-      // Remove old listeners by cloning
-      const newBtn = button.cloneNode(true);
-      button.parentNode.replaceChild(newBtn, button);
-      button = newBtn;
-      
-      // Add new event listener for tailor
-      newBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!newBtn.disabled) {
-          handleTailorApplication();
+      // Check if we're on Greenhouse - if so, trigger autofill instead of tailor
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const isGreenhouse = tabs[0]?.url && tabs[0].url.toLowerCase().includes('greenhouse.io');
+        
+        if (isGreenhouse) {
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            <span>Autofill</span>
+          `;
+        } else {
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+            <span>Tailor Resume for This Job</span>
+          `;
         }
+        
+        // Remove old listeners by cloning
+        const newBtn = button.cloneNode(true);
+        button.parentNode.replaceChild(newBtn, button);
+        
+        // Add new event listener
+        newBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!newBtn.disabled) {
+            if (isGreenhouse) {
+              handleAutofillApplication();
+            } else {
+              handleTailorApplication();
+            }
+          }
+        });
       });
     }
     
-    const h3 = readySection.querySelector('h3');
-    const p = readySection.querySelector('p');
-    if (h3) h3.textContent = 'Ready to tailor your resume?';
-    if (p) p.textContent = 'We can customize your resume to match this job description.';
+    // Update text based on site type
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const isGreenhouse = tabs[0]?.url && tabs[0].url.toLowerCase().includes('greenhouse.io');
+      const h3 = readySection.querySelector('h3');
+      const p = readySection.querySelector('p');
+      
+      if (isGreenhouse) {
+        if (h3) h3.textContent = 'Ready to autofill?';
+        if (p) p.textContent = 'Click below to automatically fill out this application form.';
+      } else {
+        if (h3) h3.textContent = 'Ready to tailor your resume?';
+        if (p) p.textContent = 'We can customize your resume to match this job description.';
+      }
+    });
   }
   document.getElementById('autofill-ready').classList.remove('hidden');
 }
