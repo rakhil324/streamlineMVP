@@ -321,3 +321,38 @@ Return the cover letter in plain text format (NO markdown, NO asterisks, NO bold
   return basePrompt;
 }
 
+/**
+ * Generates a prompt for answering application questions
+ */
+export function generateApplicationQuestionPrompt(
+  question: string,
+  resumeText: string,
+  jobDescription: string,
+  jobTitle: string,
+  companyName: string
+): string {
+  return `You are helping a job applicant answer an application question. Generate a concise, professional, and tailored answer.
+
+Application Question:
+${question}
+
+Job Title: ${jobTitle}
+Company: ${companyName}
+
+Job Description:
+${jobDescription.substring(0, 2000)}${jobDescription.length > 2000 ? '...' : ''}
+
+Candidate's Resume (for context):
+${resumeText.substring(0, 3000)}${resumeText.length > 3000 ? '...' : ''}
+
+Instructions:
+1. Answer the question directly and concisely (2-4 sentences, max 150 words)
+2. Reference specific relevant experience or skills from the resume when appropriate
+3. Show genuine interest in the role and company
+4. Keep the tone professional but personable
+5. Do NOT use markdown formatting, bullet points, or special characters
+6. Write in first person ("I", "my", "me")
+
+Return ONLY the answer text, no explanations or additional text.`;
+}
+

@@ -65,17 +65,6 @@ export default function SearchResults({ query, onSelect }: SearchResultsProps) {
             </div>
           </div>
         ))}
-        {filteredJobs.length === 5 && (
-          <div
-            onClick={() => {
-              router.push(`/search?q=${encodeURIComponent(query)}`);
-              onSelect?.();
-            }}
-            className="p-3 text-center text-primary text-sm font-medium hover:bg-gray-50 rounded-lg cursor-pointer transition-colors border-t border-gray-200 mt-2"
-          >
-            View all results for "{query}"
-          </div>
-        )}
       </div>
     </div>
   );

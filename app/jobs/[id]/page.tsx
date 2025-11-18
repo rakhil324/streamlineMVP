@@ -1,35 +1,82 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Tag from '@/components/ui/Tag';
-import { ArrowLeft, MapPin, Briefcase, DollarSign, Calendar, Building2, CheckCircle } from 'lucide-react';
-import { mockJobs } from '@/lib/mockData';
+import { ArrowLeft, MapPin, Briefcase, Building2, CheckCircle } from 'lucide-react';
+import { Job } from '@/lib/mockData';
 
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
   const jobId = params?.id as string;
-  
-  const job = mockJobs.find(j => j.id === jobId);
+  const [job, setJob] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Debug: Log if job is not found
-  if (!job && jobId) {
-    console.log('Job not found for ID:', jobId);
-    console.log('Available job IDs:', mockJobs.map(j => j.id));
-  }
+  // Fetch job from API
+  useEffect(() => {
+    async function fetchJob() {
+      if (!jobId) {
+        setError('Invalid job ID');
+        setLoading(false);
+        return;
+      }
 
-  if (!job) {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/jobs');
+        if (!response.ok) {
+          if (response.status === 401) {
+            setError('Please log in to view job details');
+          } else {
+            setError('Failed to load job');
+          }
+          return;
+        }
+        const data = await response.json();
+        if (data.success) {
+          const foundJob = (data.jobs || []).find((j: Job) => j.id === jobId);
+          if (foundJob) {
+            setJob(foundJob);
+          } else {
+            setError('Job not found');
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching job:', err);
+        setError('Failed to load job');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchJob();
+  }, [jobId]);
+
+  if (loading) {
     return (
-      <MainLayout title="Job Not Found">
+      <MainLayout title="Job Details">
         <Card>
           <div className="text-center py-12">
-            <p className="text-textSecondary mb-4">Job not found</p>
-            <Button variant="primary" onClick={() => router.push('/search')}>
-              Back to Search
+            <p className="text-textSecondary">Loading job details...</p>
+          </div>
+        </Card>
+      </MainLayout>
+    );
+  }
+
+  if (error || !job) {
+    return (
+      <MainLayout title="Job Details">
+        <Card>
+          <div className="text-center py-12">
+            <p className="text-textSecondary mb-4">{error || 'Job not found'}</p>
+            <Button variant="primary" onClick={() => router.push('/tracker')}>
+              Back to Tracker
             </Button>
           </div>
         </Card>
@@ -42,11 +89,11 @@ export default function JobDetailPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Back Button */}
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push('/tracker')}
           className="flex items-center gap-2 text-textSecondary hover:text-textPrimary transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back</span>
+          <span>Back to Tracker</span>
         </button>
 
         {/* Job Header */}
@@ -63,16 +110,11 @@ export default function JobDetailPage() {
                 </div>
                 <Tag 
                   label={job.status} 
-                  variant={
-                    job.status === 'Offer' ? 'success' : 
-                    job.status === 'Rejected' ? 'danger' : 
-                    job.status === 'Interviewing' ? 'info' : 
-                    'default'
-                  } 
+                  variant="default"
                 />
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="flex items-center gap-4 mb-4">
                 <div className="flex items-center gap-2 text-textSecondary">
                   <MapPin className="w-5 h-5" />
                   <span>{job.location}</span>
@@ -81,98 +123,29 @@ export default function JobDetailPage() {
                   <Briefcase className="w-5 h-5" />
                   <span>{job.type}</span>
                 </div>
-                {job.salary && (
-                  <div className="flex items-center gap-2 text-textSecondary">
-                    <DollarSign className="w-5 h-5" />
-                    <span>{job.salary}</span>
-                  </div>
-                )}
               </div>
 
-              {job.deadline && (
-                <div className="flex items-center gap-2 text-textSecondary">
-                  <Calendar className="w-5 h-5" />
-                  <span>Application Deadline: {job.deadline}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-textSecondary">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <span>Applied: {job.appliedDate}</span>
+              </div>
             </div>
           </div>
         </Card>
 
-        {/* Job Description */}
+        {/* Brief Description */}
         <Card>
-          <h2 className="text-xl font-semibold text-textPrimary mb-4">Job Description</h2>
+          <h2 className="text-xl font-semibold text-textPrimary mb-4">Description</h2>
           <div className="prose max-w-none">
-            <p className="text-textPrimary leading-relaxed mb-4">
-              {job.description || `We are looking for a talented ${job.title} to join our team at ${job.company}. This role involves building innovative solutions and working with cutting-edge technologies.`}
-            </p>
-            
-            <div className="mb-4">
-              <h3 className="font-semibold text-textPrimary mb-2">Key Responsibilities:</h3>
-              <ul className="list-disc list-inside space-y-1 text-textSecondary">
-                <li>Develop and maintain scalable web applications</li>
-                <li>Collaborate with cross-functional teams</li>
-                <li>Write clean, maintainable code</li>
-                <li>Participate in code reviews and technical discussions</li>
-              </ul>
-            </div>
-
-            <div className="mb-4">
-              <h3 className="font-semibold text-textPrimary mb-2">Requirements:</h3>
-              <ul className="list-disc list-inside space-y-1 text-textSecondary">
-                <li>5+ years of experience in frontend development</li>
-                <li>Strong proficiency in React and TypeScript</li>
-                <li>Experience with modern JavaScript frameworks</li>
-                <li>Excellent problem-solving skills</li>
-              </ul>
-            </div>
-          </div>
-        </Card>
-
-        {/* Skills/Keywords */}
-        {job.keywords && job.keywords.length > 0 && (
-          <Card>
-            <h2 className="text-xl font-semibold text-textPrimary mb-4">Required Skills</h2>
-            <div className="flex flex-wrap gap-2">
-              {job.keywords.map((keyword) => (
-                <Tag key={keyword} label={keyword} variant="info" />
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* Application Info */}
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-textPrimary mb-2">Application Status</h2>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-textSecondary">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span>Applied: {job.appliedDate}</span>
-                </div>
-                {job.status === 'Interviewing' && (
-                  <div className="flex items-center gap-2 text-textSecondary">
-                    <CheckCircle className="w-5 h-5 text-blue-600" />
-                    <span>Interview scheduled</span>
-                  </div>
-                )}
-                {job.status === 'Offer' && (
-                  <div className="flex items-center gap-2 text-textSecondary">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span>Offer received</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => router.push('/tracker')}>
-                View in Tracker
-              </Button>
-              <Button variant="primary">
-                Apply Now
-              </Button>
-            </div>
+            {job.description ? (
+              <p className="text-textPrimary leading-relaxed whitespace-pre-wrap">
+                {job.description}
+              </p>
+            ) : (
+              <p className="text-textSecondary italic">
+              No description available for this job.
+              </p>
+            )}
           </div>
         </Card>
       </div>
