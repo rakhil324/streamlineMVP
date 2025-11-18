@@ -1347,19 +1347,24 @@ async function autofillForm() {
     
     console.log('Streamline: Found resume fields:', resumeFields.length, 'cover letter fields:', coverLetterFields.length);
     
-    // Extract job information from the page
-    const jobInfo = extractJobInfo();
+    // Extract job information from the page (only needed for tailoring)
+    let jobInfo = { jobTitle: '', companyName: '', jobDescription: '' };
+    try {
+      jobInfo = extractJobInfo();
+      console.log('Streamline: Extracted job info:', jobInfo.jobTitle || 'No title', jobInfo.companyName || 'No company');
+    } catch (error) {
+      console.log('Streamline: Could not extract job info, continuing without it:', error.message);
+    }
     
     // ============================================
     // TAILORING FEATURE FLAG
     // ============================================
-    // DISABLED: Resume and cover letter tailoring is currently disabled due to rate limiting
-    // TO RE-ENABLE: Change the value below from `false` to `true`
-    // Location: Line ~976 in chrome-extension/content.js
+    // DISABLED: Resume and cover letter tailoring is currently disabled
+    // Job info extraction is optional and won't block autofill
     const ENABLE_TAILORING = false;
     // ============================================
     
-    const shouldTailor = ENABLE_TAILORING && jobInfo.jobDescription.length > 100; // Only tailor if we found a job description
+    const shouldTailor = ENABLE_TAILORING && jobInfo.jobDescription && jobInfo.jobDescription.length > 100;
     
     if (shouldTailor) {
       showNotification('Tailoring documents for this job...', 'info');
@@ -2067,6 +2072,28 @@ function createAutofillButton() {
 }
 
 // Initialize when page loads
+// Listen for autofill messages from popup/background (like Workday)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Greenhouse content script received message:', message.type);
+  
+  if (message.type === 'AUTOFILL_DATA') {
+    console.log('Starting Greenhouse autofill with data:', message.data);
+    // Run autofill asynchronously
+    autofillForm().then(() => {
+      sendResponse({ success: true });
+    }).catch(error => {
+      console.error('Greenhouse autofill error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // Keep message channel open for async response
+  }
+  
+  if (message.type === 'PING') {
+    sendResponse({ success: true, message: 'Greenhouse content script active' });
+    return true;
+  }
+});
+
 function init() {
   console.log('Streamline: Content script loaded');
   
