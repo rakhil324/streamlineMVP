@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
@@ -22,6 +22,21 @@ export default function AIToolsPage() {
     encryptedOriginal: string;
     encryptionKey: string;
     removedData: any;
+  } | null>(null);
+  const [uploadedCoverLetterFile, setUploadedCoverLetterFile] = useState<File | null>(null);
+  const [coverLetterContent, setCoverLetterContent] = useState<string | null>(null);
+  const [useProfileResume, setUseProfileResume] = useState(false);
+  const [profileResume, setProfileResume] = useState<{
+    fileName: string;
+    sanitizedText: string;
+    encryptedOriginal: string;
+    encryptionKey: string;
+    removedData: any;
+  } | null>(null);
+  const [useProfileCoverLetter, setUseProfileCoverLetter] = useState(false);
+  const [profileCoverLetter, setProfileCoverLetter] = useState<{
+    fileName: string;
+    content: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,9 +134,42 @@ export default function AIToolsPage() {
     handleGenerate(toolId, job);
   };
 
+  // Fetch profile documents on mount
+  useEffect(() => {
+    fetchProfileDocuments();
+  }, []);
+
+  const fetchProfileDocuments = async () => {
+    try {
+      const response = await fetch('/api/user/documents?full=true');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.resume) {
+          setProfileResume({
+            fileName: data.resume.fileName,
+            sanitizedText: data.resume.sanitizedText,
+            encryptedOriginal: data.resume.encryptedOriginal,
+            encryptionKey: data.resume.encryptionKey,
+            removedData: data.resume.removedData,
+          });
+        }
+        if (data.coverLetter) {
+          setProfileCoverLetter({
+            fileName: data.coverLetter.fileName,
+            content: data.coverLetter.content,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching profile documents:', err);
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     setError(null);
     setUploadedFile(file);
+    setUseProfileResume(false); // Switch to uploaded file mode
+    setUseProfileCoverLetter(false);
     
     try {
       const formData = new FormData();
@@ -150,6 +198,68 @@ export default function AIToolsPage() {
     }
   };
 
+  const handleCoverLetterUpload = async (file: File) => {
+    setError(null);
+    setUploadedCoverLetterFile(file);
+    setUseProfileCoverLetter(false);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload cover letter');
+      }
+
+      const data = await response.json();
+      // For cover letter, we just need the text content (restore PII if available)
+      let content = data.sanitizedText;
+      if (data.encryptedOriginal && data.encryptionKey && data.removedData) {
+        try {
+          const { decrypt } = await import('@/lib/encryption');
+          const { restorePII } = await import('@/lib/dataSanitization');
+          const originalText = decrypt(data.encryptedOriginal, data.encryptionKey);
+          content = restorePII(originalText, data.removedData);
+        } catch (err) {
+          console.error('Failed to restore PII in cover letter:', err);
+        }
+      }
+      setCoverLetterContent(content);
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload cover letter');
+      setUploadedCoverLetterFile(null);
+    }
+  };
+
+  const handleUseProfileResume = () => {
+    setError(null);
+    setUseProfileResume(true);
+    setUploadedFile(null);
+    if (profileResume) {
+      setFileData({
+        sanitizedText: profileResume.sanitizedText,
+        encryptedOriginal: profileResume.encryptedOriginal,
+        encryptionKey: profileResume.encryptionKey,
+        removedData: profileResume.removedData,
+      });
+    }
+  };
+
+  const handleUseProfileCoverLetter = () => {
+    setError(null);
+    setUseProfileCoverLetter(!useProfileCoverLetter);
+    setUploadedCoverLetterFile(null);
+    setCoverLetterContent(null);
+    // Note: Cover letter is used as template, but we still need resume data
+    // Resume data should already be set via useProfileResume or file upload
+  };
+
   const handleGenerate = async (toolId: string, job: Job | null) => {
     setError(null);
     setActiveTool(toolId);
@@ -157,9 +267,9 @@ export default function AIToolsPage() {
     setGenerationSteps(generationStepsMap[toolId as keyof typeof generationStepsMap] || []);
     setCurrentStep(0);
 
-    // For resume and cover letter, require file upload
+    // For resume and cover letter, require file data (either uploaded or from profile)
     if ((toolId === 'resume' || toolId === 'cover') && !fileData) {
-      setError('Please upload a resume file first');
+      setError('Please upload a resume file or use your saved resume from profile');
       setGenerating(null);
       return;
     }
@@ -202,8 +312,8 @@ export default function AIToolsPage() {
         }
 
         const data = await response.json();
-        setGenerating(null);
-        setCurrentStep(0);
+      setGenerating(null);
+      setCurrentStep(0);
         
         // Log for debugging
         console.log('Resume API response:', { 
@@ -232,6 +342,9 @@ export default function AIToolsPage() {
             jobDescription: job.description || '',
             jobTitle: job.title,
             companyName: job.company,
+            coverLetterTemplate: useProfileCoverLetter && profileCoverLetter 
+              ? profileCoverLetter.content 
+              : coverLetterContent || undefined,
             encryptedOriginal: fileData.encryptedOriginal,
             encryptionKey: fileData.encryptionKey,
             removedData: fileData.removedData,
@@ -268,7 +381,7 @@ export default function AIToolsPage() {
         setTimeout(() => {
           setGenerating(null);
           setCurrentStep(0);
-          setGeneratedContent(prev => ({ ...prev, interviewQuestions: mockInterviewQuestions }));
+        setGeneratedContent(prev => ({ ...prev, interviewQuestions: mockInterviewQuestions }));
         }, steps.length * 500 + 500);
       }
     } catch (err: any) {
@@ -434,15 +547,16 @@ export default function AIToolsPage() {
           </div>
         )}
 
-        {/* File Upload Section */}
-        {(activeTool === 'resume' || activeTool === 'cover' || showJobSelector === 'resume' || showJobSelector === 'cover') && (
-          <Card className="mb-6">
+        {/* File Upload Section - Always visible for resume/cover letter tools */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Resume Source Card */}
+          <Card>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-textPrimary">Upload Resume</h3>
-              {uploadedFile && (
+              <h3 className="text-lg font-semibold text-textPrimary">Resume Source</h3>
+              {(uploadedFile || useProfileResume) && (
                 <span className="text-sm text-green-600 flex items-center gap-2">
                   <CheckCircle className="w-4 h-4" />
-                  {uploadedFile.name}
+                  {useProfileResume ? 'Profile' : 'Uploaded'}
                 </span>
               )}
             </div>
@@ -452,7 +566,34 @@ export default function AIToolsPage() {
                 {error}
               </div>
             )}
-            <div className="flex items-center gap-4">
+            
+            {/* Option to use profile resume */}
+            {profileResume && (
+              <div className="mb-3">
+                <Button
+                  variant={useProfileResume ? "default" : "outline"}
+                  size="sm"
+                  onClick={handleUseProfileResume}
+                  className="w-full"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Use Resume from Profile
+                </Button>
+                <p className="text-xs text-textSecondary mt-1">{profileResume.fileName}</p>
+              </div>
+            )}
+
+            {/* Divider */}
+            {profileResume && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 border-t border-gray-300"></div>
+                <span className="text-xs text-textSecondary">OR</span>
+                <div className="flex-1 border-t border-gray-300"></div>
+              </div>
+            )}
+
+            {/* Upload new resume file */}
+            <div>
               <input
                 type="file"
                 accept=".pdf,.doc,.docx,.txt"
@@ -464,23 +605,93 @@ export default function AIToolsPage() {
                 }}
                 className="block w-full text-sm text-textSecondary file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:opacity-90 cursor-pointer"
               />
-              {uploadedFile && (
+            </div>
+            <p className="text-xs text-textSecondary mt-2">
+              PDF, Word, or Text (max 10MB)
+            </p>
+          </Card>
+
+          {/* Cover Letter Source Card */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-textPrimary">Cover Letter Template</h3>
+              {(useProfileCoverLetter || coverLetterContent) && (
+                <span className="text-sm text-green-600 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  Active
+                </span>
+              )}
+            </div>
+            
+            {/* Option to use profile cover letter */}
+            {profileCoverLetter && (
+              <div className="mb-3">
                 <Button
-                  variant="outline"
+                  variant={useProfileCoverLetter ? "default" : "outline"}
                   size="sm"
-                  onClick={() => {
-                    setUploadedFile(null);
-                    setFileData(null);
-                  }}
+                  onClick={handleUseProfileCoverLetter}
+                  className="w-full"
                 >
-                  Remove
+                  <FileText className="w-4 h-4 mr-2" />
+                  Use Cover Letter from Profile
                 </Button>
+                <p className="text-xs text-textSecondary mt-1">{profileCoverLetter.fileName}</p>
+              </div>
+            )}
+
+            {/* Divider */}
+            {profileCoverLetter && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 border-t border-gray-300"></div>
+                <span className="text-xs text-textSecondary">OR</span>
+                <div className="flex-1 border-t border-gray-300"></div>
+              </div>
+            )}
+
+            {/* Upload cover letter file */}
+            <div>
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleCoverLetterUpload(file);
+                  }
+                }}
+                className="block w-full text-sm text-textSecondary file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:opacity-90 cursor-pointer"
+              />
+              {uploadedCoverLetterFile && (
+                <p className="text-xs text-textSecondary mt-1">{uploadedCoverLetterFile.name}</p>
               )}
             </div>
             <p className="text-xs text-textSecondary mt-2">
-              Supported formats: PDF, Word (.doc, .docx), or Text (.txt). Max size: 10MB
+              {profileCoverLetter 
+                ? 'Upload a cover letter file or use your saved one from profile. This will be used as a template to match your writing style.'
+                : 'Upload a cover letter file to use as a template (optional)'}
             </p>
           </Card>
+        </div>
+
+        {/* Clear button */}
+        {(uploadedFile || useProfileResume || useProfileCoverLetter || coverLetterContent) && (
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUploadedFile(null);
+                setFileData(null);
+                setUploadedCoverLetterFile(null);
+                setCoverLetterContent(null);
+                setUseProfileResume(false);
+                setUseProfileCoverLetter(false);
+                setError(null);
+              }}
+            >
+              Clear All Selections
+            </Button>
+          </div>
         )}
 
         {/* Tool Cards */}
