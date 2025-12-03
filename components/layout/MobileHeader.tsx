@@ -5,13 +5,16 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, User, LogOut } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, Puzzle } from 'lucide-react';
 
 const navItems = [
-  { name: 'Dashboard', path: '/' },
-  { name: 'Tracker', path: '/tracker' },
-  { name: 'AI Tools', path: '/ai-tools' },
-  { name: 'Settings', path: '/settings' },
+  { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { name: 'Job Search', path: '/search', icon: Search },
+  { name: 'Tracker', path: '/tracker', icon: CheckSquare },
+  { name: 'Saved Jobs', path: '/saved', icon: Bookmark },
+  { name: 'AI Tools', path: '/ai-tools', icon: Sparkles },
+  { name: 'Extension', path: '/extension', icon: Puzzle },
+  { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
 export default function MobileHeader() {
@@ -48,17 +51,19 @@ export default function MobileHeader() {
           <nav className="flex flex-col">
             {navItems.map((item) => {
               const isActive = pathname === item.path;
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.path}
                   href={item.path}
                   onClick={() => setIsOpen(false)}
-                  className={`px-6 py-4 border-b border-gray-100 ${
+                  className={`px-6 py-4 border-b border-gray-100 flex items-center gap-3 ${
                     isActive
                       ? 'bg-primary bg-opacity-10 text-primary font-medium border-l-4 border-primary'
                       : 'text-textSecondary hover:bg-gray-50'
                   }`}
                 >
+                  <Icon className="w-5 h-5" />
                   {item.name}
                 </Link>
               );
