@@ -31,6 +31,9 @@ export default function OnboardingPage() {
 
   const currentStep = ONBOARDING_STEPS[currentStepIndex];
 
+  // Check if this is edit mode (coming from settings)
+  const [isEditMode, setIsEditMode] = useState(false);
+
   // Load existing profile data
   useEffect(() => {
     async function loadProfile() {
@@ -41,6 +44,11 @@ export default function OnboardingPage() {
         return;
       }
 
+      // Check URL params for edit mode
+      const urlParams = new URLSearchParams(window.location.search);
+      const editMode = urlParams.get('edit') === 'true';
+      setIsEditMode(editMode);
+
       try {
         const response = await fetch('/api/profile');
         if (response.ok) {
@@ -48,24 +56,27 @@ export default function OnboardingPage() {
           if (data.profileData) {
             setProfile({ ...defaultProfile, ...data.profileData });
             
-            // If onboarding is already completed, redirect to dashboard
-            if (data.profileData.onboardingCompleted) {
+            // Only redirect if NOT in edit mode and onboarding is already completed
+            if (data.profileData.onboardingCompleted && !editMode) {
               router.push('/');
               return;
             }
           }
         }
         
-        // Pre-fill email from session
+        // Pre-fill email from session if no profile exists
         if (session.user?.email) {
-          setProfile(prev => ({ ...prev, email: session.user?.email || '' }));
+          setProfile(prev => ({ 
+            ...prev, 
+            email: prev.email || session.user?.email || '' 
+          }));
         }
-        if (session.user?.name) {
+        if (session.user?.name && !profile.firstName) {
           const nameParts = session.user.name.split(' ');
           setProfile(prev => ({
             ...prev,
-            firstName: nameParts[0] || '',
-            lastName: nameParts.slice(1).join(' ') || '',
+            firstName: prev.firstName || nameParts[0] || '',
+            lastName: prev.lastName || nameParts.slice(1).join(' ') || '',
           }));
         }
       } catch (err) {
@@ -106,7 +117,7 @@ export default function OnboardingPage() {
       const finalProfile: UserProfile = {
         ...profile,
         onboardingCompleted: true,
-        onboardingCompletedAt: new Date().toISOString(),
+        onboardingCompletedAt: profile.onboardingCompletedAt || new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
       };
 
@@ -120,8 +131,12 @@ export default function OnboardingPage() {
         throw new Error('Failed to save profile');
       }
 
-      // Redirect to dashboard
-      router.push('/');
+      // Redirect to settings if in edit mode, otherwise dashboard
+      if (isEditMode) {
+        router.push('/settings');
+      } else {
+        router.push('/');
+      }
       router.refresh();
     } catch (err) {
       console.error('Error saving profile:', err);
@@ -203,10 +218,12 @@ export default function OnboardingPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Complete Your Profile
+            {isEditMode ? 'Edit Your Profile' : 'Complete Your Profile'}
           </h1>
           <p className="text-gray-600">
-            This information will be used to autofill your job applications
+            {isEditMode 
+              ? 'Update your information below. Changes will be saved when you complete all steps.'
+              : 'This information will be used to autofill your job applications'}
           </p>
         </div>
 

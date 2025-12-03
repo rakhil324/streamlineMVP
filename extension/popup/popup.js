@@ -940,6 +940,15 @@ function displayProfileData(profile) {
   // Build fields HTML - only include fields that have values
   let fieldsHTML = '';
   
+  // Source indicator
+  const sourceLabel = profile.source === 'database' ? '🔗 From Database' : 
+                      profile.source === 'fallback' ? '⚠️ Demo Profile' : '📋 Local Profile';
+  fieldsHTML += `
+    <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; padding: 4px 8px; background: #f3f4f6; border-radius: 4px; display: inline-block;">
+      ${sourceLabel}
+    </div>
+  `;
+  
   // Location
   if (profile.location) {
     const locationEscaped = profile.location.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -972,24 +981,62 @@ function displayProfileData(profile) {
       </div>
     `;
   }
+  
+  // LinkedIn
+  if (profile.linkedIn) {
+    fieldsHTML += `
+      <div class="profile-field copyable-field" data-copy-value="${profile.linkedIn}">
+        <p class="profile-field-label">LinkedIn</p>
+        <p class="profile-field-value" style="color: #0077b5;">${profile.linkedIn}</p>
+      </div>
+    `;
+  }
+
+  // Work Authorization
+  if (profile.workAuthorization) {
+    const authStatus = profile.workAuthorization.authorizedToWork ? '✓ Authorized to work' : '✗ Not authorized';
+    const sponsorStatus = profile.workAuthorization.requiresSponsorship ? 'Requires sponsorship' : 'No sponsorship needed';
+    fieldsHTML += `
+      <div class="profile-field" style="background: ${profile.workAuthorization.authorizedToWork ? '#f0fdf4' : '#fef2f2'}; border-radius: 8px; padding: 8px;">
+        <p class="profile-field-label">Work Authorization</p>
+        <p class="profile-field-value" style="font-size: 13px;">${authStatus}</p>
+        <p class="profile-field-label" style="font-size: 11px;">${sponsorStatus}</p>
+      </div>
+    `;
+  }
 
   // If no basic fields, show message
-  if (!fieldsHTML) {
-    fieldsHTML = '<p style="color: #6b7280; font-size: 14px; margin: 16px 0;">No profile information available. Please sync from dashboard.</p>';
+  if (!profile.email && !profile.phone && !profile.location) {
+    fieldsHTML += '<p style="color: #6b7280; font-size: 14px; margin: 16px 0;">No profile information available. Please complete your profile in the dashboard.</p>';
+  }
+
+  // Add skills section
+  if (profile.skills && Array.isArray(profile.skills) && profile.skills.length > 0) {
+    const skillsHTML = profile.skills.map(skill => 
+      `<span style="display: inline-block; padding: 4px 10px; margin: 2px; background: #e0e7ff; color: #3730a3; border-radius: 12px; font-size: 12px;">${skill}</span>`
+    ).join('');
+    
+    fieldsHTML += `
+      <h4 style="font-size: 14px; font-weight: 600; color: #1a1a1a; margin-top: 16px; margin-bottom: 8px;">Skills</h4>
+      <div style="margin-bottom: 12px;">${skillsHTML}</div>
+    `;
   }
 
   // Add education section
   if (profile.education && Array.isArray(profile.education) && profile.education.length > 0) {
     const educationHTML = profile.education.map(edu => {
       const school = edu.school || edu.name || '';
-      const degree = edu.degree || edu.field || '';
+      const degree = edu.degree || '';
+      const field = edu.field || edu.fieldOfStudy || '';
       const years = edu.years || edu.duration || '';
+      const gpa = edu.gpa || '';
       const eduJson = JSON.stringify(edu).replace(/'/g, "\\'").replace(/"/g, '&quot;');
       return `
         <div class="profile-field copyable-field" data-copy-value="${eduJson}">
           <p class="profile-field-value">${school}</p>
-          <p class="profile-field-label">${degree}</p>
-          ${years ? `<p class="profile-field-label">${years}</p>` : ''}
+          <p class="profile-field-label">${degree}${field ? ` in ${field}` : ''}</p>
+          ${years ? `<p class="profile-field-label" style="font-size: 11px;">${years}</p>` : ''}
+          ${gpa ? `<p class="profile-field-label" style="font-size: 11px;">GPA: ${gpa}</p>` : ''}
         </div>
       `;
     }).join('');
@@ -1005,13 +1052,14 @@ function displayProfileData(profile) {
     const experienceHTML = profile.experience.map(exp => {
       const title = exp.title || exp.position || '';
       const company = exp.company || exp.employer || '';
+      const location = exp.location || '';
       const duration = exp.duration || exp.period || '';
       const expJson = JSON.stringify(exp).replace(/'/g, "\\'").replace(/"/g, '&quot;');
       return `
         <div class="profile-field copyable-field" data-copy-value="${expJson}">
           <p class="profile-field-value">${title}</p>
-          <p class="profile-field-label">${company}</p>
-          ${duration ? `<p class="profile-field-label">${duration}</p>` : ''}
+          <p class="profile-field-label">${company}${location ? ` • ${location}` : ''}</p>
+          ${duration ? `<p class="profile-field-label" style="font-size: 11px;">${duration}</p>` : ''}
         </div>
       `;
     }).join('');
@@ -1020,6 +1068,31 @@ function displayProfileData(profile) {
       <h4 style="font-size: 14px; font-weight: 600; color: #1a1a1a; margin-top: 16px; margin-bottom: 12px;">Experience</h4>
       ${experienceHTML}
     `;
+  }
+
+  // Add job preferences section
+  if ((profile.preferredTitles && profile.preferredTitles.length > 0) || 
+      (profile.preferredLocations && profile.preferredLocations.length > 0) ||
+      profile.availability) {
+    fieldsHTML += `<h4 style="font-size: 14px; font-weight: 600; color: #1a1a1a; margin-top: 16px; margin-bottom: 8px;">Job Preferences</h4>`;
+    
+    if (profile.preferredTitles && profile.preferredTitles.length > 0) {
+      const titlesHTML = profile.preferredTitles.map(t => 
+        `<span style="display: inline-block; padding: 3px 8px; margin: 2px; background: #dbeafe; color: #1e40af; border-radius: 8px; font-size: 11px;">${t}</span>`
+      ).join('');
+      fieldsHTML += `<div style="margin-bottom: 8px;"><span style="font-size: 11px; color: #6b7280;">Roles: </span>${titlesHTML}</div>`;
+    }
+    
+    if (profile.preferredLocations && profile.preferredLocations.length > 0) {
+      const locsHTML = profile.preferredLocations.map(l => 
+        `<span style="display: inline-block; padding: 3px 8px; margin: 2px; background: #f3f4f6; color: #374151; border-radius: 8px; font-size: 11px;">${l}</span>`
+      ).join('');
+      fieldsHTML += `<div style="margin-bottom: 8px;"><span style="font-size: 11px; color: #6b7280;">Locations: </span>${locsHTML}</div>`;
+    }
+    
+    if (profile.availability) {
+      fieldsHTML += `<div style="font-size: 12px; color: #374151;">Availability: ${profile.availability}</div>`;
+    }
   }
 
   // Add resume status
@@ -1031,14 +1104,14 @@ function displayProfileData(profile) {
         </p>
       </div>
     `;
-  } else if (!profile.authenticated) {
+  } else if (!profile.authenticated || profile.source === 'fallback') {
     fieldsHTML += `
       <div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 8px;">
         <p style="font-size: 13px; color: #92400e; margin: 0 0 8px 0;">
-          💡 Using demo profile. Log in to sync your own profile and resume.
+          💡 ${profile.source === 'fallback' ? 'Not logged in.' : 'Using demo profile.'} Log in to sync your profile.
         </p>
         <button class="secondary-button" id="loginToSyncBtn" style="width: 100%; margin-top: 8px; font-size: 12px;">
-          Log In to Sync
+          Log In to Dashboard
         </button>
       </div>
     `;

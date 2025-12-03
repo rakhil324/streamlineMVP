@@ -2,97 +2,195 @@
  * Profile Configuration
  * 
  * This file contains the profile data configuration.
- * 
- * CURRENT: Hardcoded profile data for demo/testing
- * FUTURE: Replace with database API call
- * 
- * To switch to database:
- * 1. Replace getProfileData() to fetch from API
- * 2. Keep the same return structure
- * 3. Update syncProfile() in popup.js to use this
+ * Fetches profile data from the database API.
  */
 
 export const PROFILE_CONFIG = {
-  // Set to 'hardcoded' or 'database'
-  source: 'hardcoded',
+  // Set to 'database' to fetch from API
+  source: 'database',
   
-  // API endpoint for database (when source is 'database')
+  // API endpoint for database
   apiEndpoint: 'http://localhost:3000/api/profile',
   
-  // Hardcoded profile data (used when source is 'hardcoded')
-  hardcodedProfile: {
+  // Fallback hardcoded profile data (used when API fails)
+  fallbackProfile: {
     id: '1',
-    firstName: 'Hriday',
-    lastName: 'Sainathuni',
-    name: 'Hriday Sainathuni',
-    email: 'sainathunih@gmail.com',
-    phone: '+15713513185',
-    location: 'Ashburn, VA, USA',
-    education: [
-      {
-        school: 'University of Virginia',
-        degree: "Bachelor's, Computer Science",
-        years: '2024 – 2027',
-      },
-    ],
-    experience: [
-      {
-        title: 'Software Engineer',
-        company: 'Tech Corp',
-        duration: '2022 – Present',
-      },
-      {
-        title: 'Junior Developer',
-        company: 'Startup Inc',
-        duration: '2020 – 2022',
-      },
-    ],
-    resume: chrome.runtime.getURL('Updated_Hriday_Sainathuni_Resume_2025.pdf'), // Local extension resume
+    firstName: 'Demo',
+    lastName: 'User',
+    name: 'Demo User',
+    email: 'demo@streamline.ai',
+    phone: '+1 555-123-4567',
+    location: 'San Francisco, CA',
+    education: [],
+    experience: [],
+    skills: [],
+    resume: null,
     resumeText: null,
-    resumeUrl: chrome.runtime.getURL('Updated_Hriday_Sainathuni_Resume_2025.pdf'), // Alternative resume URL
-    authenticated: true,
+    authenticated: false,
   },
 };
 
 /**
- * Get profile data based on configuration
+ * Transform database profile to extension format
+ * @param {Object} dbProfile - Profile from database API
+ * @returns {Object} Profile in extension format
+ */
+function transformDatabaseProfile(dbProfile) {
+  if (!dbProfile) return null;
+  
+  // Build location string from address
+  let location = '';
+  if (dbProfile.address) {
+    const parts = [];
+    if (dbProfile.address.city) parts.push(dbProfile.address.city);
+    if (dbProfile.address.state) parts.push(dbProfile.address.state);
+    if (dbProfile.address.country && dbProfile.address.country !== 'United States') {
+      parts.push(dbProfile.address.country);
+    }
+    location = parts.join(', ');
+  }
+  
+  // Transform education array
+  const education = (dbProfile.education || []).map(edu => ({
+    school: edu.school || '',
+    degree: edu.degree || '',
+    field: edu.fieldOfStudy || '',
+    years: edu.graduationDate ? 
+      `${edu.current ? 'Expected ' : ''}${new Date(edu.graduationDate).getFullYear()}` : '',
+    gpa: edu.gpa || '',
+  }));
+  
+  // Transform experience array
+  const experience = (dbProfile.experience || []).map(exp => ({
+    title: exp.title || '',
+    company: exp.company || '',
+    location: exp.location || '',
+    duration: formatDuration(exp.startDate, exp.endDate, exp.current),
+    description: exp.description || '',
+    current: exp.current || false,
+  }));
+  
+  return {
+    id: dbProfile.id || '1',
+    firstName: dbProfile.firstName || '',
+    lastName: dbProfile.lastName || '',
+    name: `${dbProfile.firstName || ''} ${dbProfile.lastName || ''}`.trim(),
+    email: dbProfile.email || '',
+    phone: dbProfile.phone || '',
+    location: location,
+    address: dbProfile.address || {},
+    
+    // Work Authorization
+    workAuthorization: dbProfile.workAuthorization || {
+      authorizedToWork: true,
+      requiresSponsorship: false,
+    },
+    
+    // Education & Experience
+    education: education,
+    experience: experience,
+    
+    // Skills
+    skills: dbProfile.skills || [],
+    languages: dbProfile.languages || [],
+    certifications: dbProfile.certifications || [],
+    
+    // Job Preferences
+    preferredTitles: dbProfile.preferredTitles || [],
+    preferredLocations: dbProfile.preferredLocations || [],
+    preferredJobTypes: dbProfile.preferredJobTypes || [],
+    salaryExpectation: dbProfile.salaryExpectation || null,
+    availability: dbProfile.availability || '',
+    
+    // Links
+    linkedIn: dbProfile.linkedIn || '',
+    portfolio: dbProfile.portfolio || '',
+    
+    // Resume (will be loaded separately if available)
+    resume: null,
+    resumeText: null,
+    
+    // Meta
+    authenticated: true,
+    onboardingCompleted: dbProfile.onboardingCompleted || false,
+    source: 'database',
+  };
+}
+
+/**
+ * Format duration string from dates
+ */
+function formatDuration(startDate, endDate, current) {
+  if (!startDate) return '';
+  
+  const start = new Date(startDate);
+  const startStr = start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  
+  if (current) {
+    return `${startStr} – Present`;
+  }
+  
+  if (endDate) {
+    const end = new Date(endDate);
+    const endStr = end.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    return `${startStr} – ${endStr}`;
+  }
+  
+  return startStr;
+}
+
+/**
+ * Get profile data from database API
  * @returns {Promise<Object>} Profile data object
  */
 export async function getProfileData() {
-  if (PROFILE_CONFIG.source === 'hardcoded') {
-    // Return hardcoded profile immediately
-    return Promise.resolve({
-      ...PROFILE_CONFIG.hardcodedProfile,
-      source: 'hardcoded',
+  try {
+    console.log('Fetching profile from database API...');
+    
+    const response = await fetch(PROFILE_CONFIG.apiEndpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include', // Include cookies for auth
     });
-  } else {
-    // Fetch from database/API
-    try {
-      const response = await fetch(PROFILE_CONFIG.apiEndpoint, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`);
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.log('Not authenticated, using fallback profile');
+        return {
+          ...PROFILE_CONFIG.fallbackProfile,
+          source: 'fallback',
+          authenticated: false,
+        };
       }
-      
-      const result = await response.json();
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log('API response:', result);
+    
+    if (result.profileData) {
+      const transformed = transformDatabaseProfile(result.profileData);
+      console.log('Transformed profile:', transformed);
+      return transformed;
+    } else {
+      console.log('No profile data in response, using fallback');
       return {
-        ...(result.profile || result),
-        source: 'database',
-      };
-    } catch (error) {
-      console.error('Failed to fetch profile from database, using hardcoded:', error);
-      // Fallback to hardcoded on error
-      return {
-        ...PROFILE_CONFIG.hardcodedProfile,
-        source: 'hardcoded',
-        error: error.message,
+        ...PROFILE_CONFIG.fallbackProfile,
+        source: 'fallback',
+        authenticated: false,
       };
     }
+  } catch (error) {
+    console.error('Failed to fetch profile from database:', error);
+    // Fallback to default profile on error
+    return {
+      ...PROFILE_CONFIG.fallbackProfile,
+      source: 'fallback',
+      error: error.message,
+      authenticated: false,
+    };
   }
 }
 
@@ -103,4 +201,3 @@ export async function getProfileData() {
 export function updateProfileConfig(config) {
   Object.assign(PROFILE_CONFIG, config);
 }
-

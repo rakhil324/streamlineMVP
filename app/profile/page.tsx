@@ -193,7 +193,7 @@ export default function ProfilePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => router.push('/onboarding')}
+                  onClick={() => router.push('/onboarding?edit=true')}
                   className="flex items-center gap-2"
                 >
                   <Edit2 className="w-4 h-4" />
@@ -478,8 +478,47 @@ export default function ProfilePage() {
           </Card>
         )}
 
+        {/* Work Authorization */}
+        {profile.workAuthorization && (
+          <Card>
+            <h3 className="text-lg font-semibold text-textPrimary mb-4">Work Authorization</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center gap-2">
+                {profile.workAuthorization.authorizedToWork ? (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-yellow-600" />
+                )}
+                <span className="text-sm text-textPrimary">
+                  {profile.workAuthorization.authorizedToWork 
+                    ? 'Authorized to work in the US' 
+                    : 'Not authorized to work in the US'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {profile.workAuthorization.requiresSponsorship ? (
+                  <AlertCircle className="w-5 h-5 text-yellow-600" />
+                ) : (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                )}
+                <span className="text-sm text-textPrimary">
+                  {profile.workAuthorization.requiresSponsorship 
+                    ? 'Requires visa sponsorship' 
+                    : 'Does not require sponsorship'}
+                </span>
+              </div>
+              {profile.workAuthorization.citizenshipStatus && (
+                <div className="col-span-2">
+                  <span className="text-sm text-textSecondary">Status: </span>
+                  <span className="text-sm text-textPrimary">{profile.workAuthorization.citizenshipStatus}</span>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
         {/* Job Preferences */}
-        {(profile.preferredTitles?.length > 0 || profile.preferredLocations?.length > 0) && (
+        {(profile.preferredTitles?.length > 0 || profile.preferredLocations?.length > 0 || profile.preferredJobTypes?.length > 0) && (
           <Card>
             <h3 className="text-lg font-semibold text-textPrimary mb-4">Job Preferences</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -507,6 +546,18 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
+              {profile.preferredJobTypes && profile.preferredJobTypes.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-textSecondary mb-2">Job Types</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.preferredJobTypes.map((type) => (
+                      <span key={type} className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                        {type}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {profile.salaryExpectation && (profile.salaryExpectation.min || profile.salaryExpectation.max) && (
                 <div>
                   <h4 className="text-sm font-medium text-textSecondary mb-2">Salary Expectation</h4>
@@ -522,6 +573,20 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+          </Card>
+        )}
+
+        {/* Debug: Raw Profile Data (remove in production) */}
+        {process.env.NODE_ENV === 'development' && (
+          <Card className="border-yellow-200 bg-yellow-50">
+            <details>
+              <summary className="text-sm font-semibold text-yellow-800 cursor-pointer mb-2">
+                🔧 Debug: View Raw Profile Data
+              </summary>
+              <pre className="text-xs text-yellow-900 overflow-auto max-h-96 p-3 bg-yellow-100 rounded">
+                {JSON.stringify(profile, null, 2)}
+              </pre>
+            </details>
           </Card>
         )}
       </div>

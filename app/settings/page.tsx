@@ -240,7 +240,7 @@ export default function SettingsPage() {
                 Want to update your education, experience, or skills?{' '}
                 <button
                   type="button"
-                  onClick={() => router.push('/onboarding')}
+                  onClick={() => router.push('/onboarding?edit=true')}
                   className="font-medium underline hover:no-underline"
                 >
                   Edit your full profile

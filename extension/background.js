@@ -295,23 +295,60 @@ async function handleAutofillRequest(tabId, data) {
   }
 
   // Prepare autofill data with proper field mappings
-  // Handle resume - prefer resumeUrl, then resume, then create a default if none exists
+  // Handle resume - prefer resumeUrl, then resume
   let resumeData = profileData.resume || profileData.resumeUrl || null;
   
-  // If resume is null but we have a demo profile, use default resume URL
-  if (!resumeData && profileData.source === 'hardcoded') {
-    resumeData = 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
-    console.log('Using default demo resume URL');
+  // Build location string from address if not already set
+  let locationStr = profileData.location || '';
+  if (!locationStr && profileData.address) {
+    const parts = [];
+    if (profileData.address.city) parts.push(profileData.address.city);
+    if (profileData.address.state) parts.push(profileData.address.state);
+    locationStr = parts.join(', ');
   }
   
   const autofillData = {
+    // Personal Info
     firstName: profileData.firstName || profileData.name?.split(' ')[0] || '',
     lastName: profileData.lastName || profileData.name?.split(' ').slice(1).join(' ') || '',
     email: profileData.email || '',
     phone: profileData.phone || '',
-    location: profileData.location || '',
+    location: locationStr,
+    
+    // Address components (for detailed forms)
+    address: profileData.address || {},
+    street: profileData.address?.street || '',
+    city: profileData.address?.city || '',
+    state: profileData.address?.state || '',
+    zip: profileData.address?.zip || '',
+    country: profileData.address?.country || 'United States',
+    
+    // Work Authorization
+    workAuthorization: profileData.workAuthorization || { authorizedToWork: true, requiresSponsorship: false },
+    authorizedToWork: profileData.workAuthorization?.authorizedToWork ?? true,
+    requiresSponsorship: profileData.workAuthorization?.requiresSponsorship ?? false,
+    
+    // Experience & Education
     experience: profileData.experience || [],
     education: profileData.education || [],
+    
+    // Skills
+    skills: profileData.skills || [],
+    languages: profileData.languages || [],
+    certifications: profileData.certifications || [],
+    
+    // Job Preferences
+    preferredTitles: profileData.preferredTitles || [],
+    preferredLocations: profileData.preferredLocations || [],
+    preferredJobTypes: profileData.preferredJobTypes || [],
+    salaryExpectation: profileData.salaryExpectation || null,
+    availability: profileData.availability || '',
+    
+    // Links
+    linkedIn: profileData.linkedIn || '',
+    portfolio: profileData.portfolio || '',
+    
+    // Documents
     resume: resumeData,
     resumeText: profileData.resumeText || null,
     coverLetter: profileData.coverLetter || null,
