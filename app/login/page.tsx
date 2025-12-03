@@ -121,11 +121,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-700">
-              <strong>Demo credentials:</strong> demo@streamline.ai / password123
-            </p>
-          </div>
         </Card>
       </motion.div>
     </div>

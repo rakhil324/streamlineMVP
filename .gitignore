@@ -34,6 +34,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# prisma
+/lib/generated/prisma
+
+# local database and storage
+dev.db
+dev.db-journal
+/storage
+.env
+.env.temp
+.env.sqlite.example
+
 # user documents storage
 .user-documents/
-

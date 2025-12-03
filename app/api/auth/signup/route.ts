@@ -22,20 +22,24 @@ export async function POST(request: Request) {
 
     const { email, name, password } = parsed.data;
 
-    const user = await createUser(email, name, password);
+    try {
+      const user = await createUser(email, name, password);
 
-    if (!user) {
       return NextResponse.json(
-        { error: 'User with this email already exists' },
-        { status: 409 }
+        { message: 'User created successfully', user: { id: user.id, email: user.email, name: user.name } },
+        { status: 201 }
       );
+    } catch (error: any) {
+      if (error.message === 'User already exists') {
+        return NextResponse.json(
+          { error: 'User with this email already exists' },
+          { status: 409 }
+        );
+      }
+      throw error;
     }
-
-    return NextResponse.json(
-      { message: 'User created successfully', user: { id: user.id, email: user.email, name: user.name } },
-      { status: 201 }
-    );
   } catch (error) {
+    console.error('Signup error:', error);
     return NextResponse.json(
       { error: 'An error occurred while creating the account' },
       { status: 500 }

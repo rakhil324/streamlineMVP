@@ -1,53 +1,24 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-
-// User interface
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  password: string;
-}
-
-// Global user store (shared across the application)
-// This is populated from file storage via API routes
-declare global {
-  var userStore: User[] | undefined;
-}
-
-// Initialize with demo user
-const DEFAULT_USERS: User[] = [
-  {
-    id: '1',
-    email: 'demo@streamline.ai',
-    name: 'Demo User',
-    password: 'demo123',
-  },
-];
-
-// Get users from global store
-export function getUsers(): User[] {
-  if (!global.userStore) {
-    global.userStore = [...DEFAULT_USERS];
-  }
-  return global.userStore;
-}
-
-// Set users in global store
-export function setUsers(users: User[]): void {
-  global.userStore = users;
-}
-
-// Add a user to the store
-export function addUser(user: User): void {
-  const users = getUsers();
-  users.push(user);
-  global.userStore = users;
-}
+import { prisma } from './prisma';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  adapter: PrismaAdapter(prisma),
   providers: [
+    // Google OAuth (optional - only if configured)
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+    // Email/Password Credentials
     Credentials({
       credentials: {
         email: { label: 'Email', type: 'email' },
@@ -67,18 +38,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const { email, password } = parsedCredentials.data;
 
-        // Get users from global store
-        const users = getUsers();
+        // Find user in database
+        const user = await prisma.user.findUnique({
+          where: { email },
+        });
 
-        // Find user
-        const user = users.find((u) => u.email === email);
-        if (!user) {
-          console.log('User not found:', email);
+        if (!user || !user.password) {
           return null;
         }
 
-        // Verify password
-        const isValidPassword = password === user.password;
+        // Verify password with bcrypt
+        const isValidPassword = await bcrypt.compare(password, user.password);
 
         if (!isValidPassword) {
           console.log('Invalid password for user:', email);
@@ -89,6 +59,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
+          image: user.image,
         };
       },
     }),
@@ -100,31 +71,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: 'jwt',
   },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
   secret: process.env.AUTH_SECRET || 'your-secret-key-change-in-production',
 });
 
-// Helper function for user management (called from API routes)
-export async function createUser(email: string, name: string, password: string): Promise<User | null> {
-  const users = getUsers();
-
+// Helper functions for user management
+export async function createUser(email: string, name: string, password: string) {
   // Check if user already exists
-  if (users.find((u) => u.email === email)) {
-    return null;
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (existingUser) {
+    throw new Error('User already exists');
   }
 
-  // Create new user
-  const newUser: User = {
-    id: `user-${Date.now()}`,
-    email,
-    name,
-    password,
-  };
+  // Hash password with bcrypt
+  const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Add to global store
-  addUser(newUser);
+  // Create user in database
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      password: hashedPassword,
+    },
+  });
 
-  console.log('User created:', email);
-  return newUser;
+  return user;
+}
+
+export async function getUserById(id: string) {
+  return await prisma.user.findUnique({
+    where: { id },
+    include: {
+      profile: true,
+    },
+  });
 }
 
 declare module 'next-auth' {
@@ -134,4 +130,3 @@ declare module 'next-auth' {
     } & DefaultSession['user'];
   }
 }
-
