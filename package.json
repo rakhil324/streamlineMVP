@@ -15,7 +15,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:server": "npx ts-node tests/test-server.ts",
+    "test:server": "node tests/test-server.js",
     "test:all": "npm run test:unit && npm run test:e2e",
     "playwright:install": "playwright install chromium"
   },
