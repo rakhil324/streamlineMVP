@@ -738,6 +738,164 @@ class WorkdayHandler {
     }
   }
 
+  /**
+   * Extract job information from Workday page
+   */
+  extractJobInfo() {
+    let jobTitle = '';
+    let companyName = '';
+    let jobDescription = '';
+    let location = '';
+
+    // Try to find job title
+    const titleSelectors = [
+      'h1[data-automation-id="jobPostingHeader"]',
+      'h1[data-automation-id="jobTitle"]',
+      'h1',
+      '[data-automation-id="jobTitle"]',
+      '.css-14o6bo2', // Common Workday job title class
+    ];
+
+    for (const selector of titleSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        const text = element.textContent.trim();
+        if (text.length > 0 && text.length < 200 && !text.includes('Sign') && !text.includes('Menu')) {
+          jobTitle = text;
+          break;
+        }
+      }
+    }
+
+    // Try to find company name from page or URL
+    const companySelectors = [
+      '[data-automation-id="companyName"]',
+      '.company-name',
+    ];
+
+    for (const selector of companySelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        companyName = element.textContent.trim();
+        break;
+      }
+    }
+
+    // Fallback: extract company from URL (e.g., company.wd5.myworkdayjobs.com)
+    if (!companyName) {
+      const hostname = window.location.hostname;
+      const match = hostname.match(/^([^.]+)\.wd\d+\.myworkdayjobs\.com/i) ||
+                   hostname.match(/^([^.]+)\.workday\.com/i);
+      if (match) {
+        companyName = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+      }
+    }
+
+    // Try to find location
+    const locationSelectors = [
+      '[data-automation-id="location"]',
+      '[data-automation-id="jobLocation"]',
+    ];
+
+    for (const selector of locationSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        location = element.textContent.trim();
+        break;
+      }
+    }
+
+    // Try to find job description
+    const descriptionSelectors = [
+      '[data-automation-id="jobPostingDescription"]',
+      '[data-automation-id="jobDescription"]',
+      '.job-description',
+    ];
+
+    for (const selector of descriptionSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        jobDescription = element.textContent.trim().substring(0, 2000);
+        break;
+      }
+    }
+
+    console.log('Workday: Extracted job info', {
+      jobTitle: jobTitle || 'Not found',
+      companyName: companyName || 'Not found',
+      location: location || 'Not found',
+      descriptionLength: jobDescription.length
+    });
+
+    return { jobTitle, companyName, jobDescription, location };
+  }
+
+  /**
+   * Save job to application tracker via background script
+   */
+  async saveJobToTracker(jobInfo) {
+    try {
+      if (!jobInfo.jobTitle || !jobInfo.companyName) {
+        console.log('Workday: Missing job info, skipping tracker save');
+        return;
+      }
+
+      console.log('Workday: Saving job to application tracker...');
+      const response = await chrome.runtime.sendMessage({
+        type: 'saveJob',
+        jobInfo: {
+          title: jobInfo.jobTitle,
+          company: jobInfo.companyName,
+          location: jobInfo.location || '',
+          description: jobInfo.jobDescription || '',
+          jobUrl: window.location.href
+        }
+      });
+
+      if (response && response.success) {
+        console.log('Workday: Job saved to tracker successfully');
+      } else {
+        console.warn('Workday: Failed to save job to tracker:', response?.error);
+      }
+    } catch (error) {
+      console.warn('Workday: Error saving job to tracker:', error);
+    }
+  }
+
+  /**
+   * Generate AI answer for essay questions
+   */
+  async generateLLMAnswer(questionText, jobInfo) {
+    try {
+      if (!questionText) {
+        console.log('Workday: No question text provided');
+        return '';
+      }
+
+      console.log('Workday: Generating AI answer for question:', questionText.substring(0, 100));
+
+      // Call AI API through background script
+      const response = await chrome.runtime.sendMessage({
+        type: 'generateAnswer',
+        question: questionText,
+        jobDescription: jobInfo.jobDescription || '',
+        jobTitle: jobInfo.jobTitle || '',
+        companyName: jobInfo.companyName || ''
+      });
+
+      if (response && response.success && response.answer) {
+        console.log('Workday: AI generated answer (first 100 chars):', response.answer.substring(0, 100));
+        return response.answer;
+      } else {
+        console.warn('Workday: AI answer generation failed:', response?.error);
+        return '';
+      }
+    } catch (error) {
+      console.error('Workday: Error generating AI answer:', error);
+      return '';
+    }
+  }
+
   async autofill(data) {
     if (this.isAutofilling) {
       console.log('Autofill already in progress, skipping...');
@@ -1634,6 +1792,12 @@ class WorkdayHandler {
       }).catch(() => {
         // Ignore errors if background isn't listening
       });
+
+      // Automatically save job to application tracker
+      if (filledCount > 0) {
+        const jobInfo = this.extractJobInfo();
+        await this.saveJobToTracker(jobInfo);
+      }
 
       return { success: true, filledCount: filledCount };
     } catch (error) {
