@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getSignedUrl, downloadFile } from '@/lib/localStorage';
+import { getSignedUrl, deleteFile } from '@/lib/supabase';
 
 /**
  * GET /api/resumes/[id]
@@ -29,9 +29,8 @@ export async function GET(
       return NextResponse.json({ error: 'Resume not found' }, { status: 404 });
     }
 
-    // For local storage, storageUrl is the relative path
-    // Generate signed URL for secure access (for local, it's just the path)
-    const signedUrl = await getSignedUrl('resumes', resume.storageUrl, 3600);
+    // Generate signed URL for secure file access (expires in 1 hour)
+    const signedUrl = await getSignedUrl('resumes', resume.storageUrl.replace(/^resumes\//, ''), 3600);
 
     return NextResponse.json({
       resume: {
@@ -81,13 +80,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Resume not found' }, { status: 404 });
     }
 
+    // Delete from Supabase Storage
+    try {
+      await deleteFile('resumes', resume.storageUrl.replace(/^resumes\//, ''));
+    } catch (error) {
+      console.error('Error deleting file from storage:', error);
+      // Continue with database deletion even if storage deletion fails
+    }
+
     // Delete from database
     await prisma.resume.delete({
       where: { id: params.id },
     });
-
-    // Note: We're not deleting from Supabase Storage for safety
-    // You can add deleteFile() call here if you want to remove from storage too
 
     return NextResponse.json({ success: true });
   } catch (error) {

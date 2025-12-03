@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { uploadEncryptedFile } from '@/lib/localStorage';
+import { uploadEncryptedFile } from '@/lib/supabase';
 import { encrypt, generateSecureKey } from '@/lib/encryption';
 
 /**
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     const storageUrl = await uploadEncryptedFile(
       'resumes',
       filePath,
-      Buffer.from(encryptedData, 'base64'),
+      Buffer.from(encryptedData),
       'application/octet-stream'
     );
 

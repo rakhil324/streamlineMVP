@@ -2,10 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { User, Mail, MapPin, Briefcase, Download, Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { 
+  User, Mail, MapPin, Briefcase, Download, Upload, FileText, X, 
+  CheckCircle, AlertCircle, Loader2, GraduationCap, Phone, 
+  Globe, Linkedin, Edit2, Wrench
+} from 'lucide-react';
+import { UserProfile } from '@/lib/profileTypes';
 
 interface DocumentInfo {
   fileName: string;
@@ -15,30 +21,55 @@ interface DocumentInfo {
 }
 
 export default function ProfilePage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [resume, setResume] = useState<DocumentInfo | null>(null);
   const [coverLetter, setCoverLetter] = useState<DocumentInfo | null>(null);
   const [uploading, setUploading] = useState<'resume' | 'coverLetter' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Fetch user documents on mount
+  // Fetch profile and documents on mount
   useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const fetchDocuments = async () => {
-    try {
-      const response = await fetch('/api/user/documents');
-      if (response.ok) {
-        const data = await response.json();
-        setResume(data.resume);
-        setCoverLetter(data.coverLetter);
+    async function loadData() {
+      if (status === 'loading') return;
+      
+      if (!session) {
+        router.push('/login');
+        return;
       }
-    } catch (err) {
-      console.error('Error fetching documents:', err);
+
+      try {
+        // Load profile
+        const profileRes = await fetch('/api/profile');
+        const profileData = await profileRes.json();
+        
+        if (profileData.profileData) {
+          setProfile(profileData.profileData);
+        } else {
+          // No profile, redirect to onboarding
+          router.push('/onboarding');
+          return;
+        }
+
+        // Load documents
+        const docsRes = await fetch('/api/user/documents');
+        if (docsRes.ok) {
+          const docsData = await docsRes.json();
+          setResume(docsData.resume);
+          setCoverLetter(docsData.coverLetter);
+        }
+      } catch (err) {
+        console.error('Error loading data:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  };
+
+    loadData();
+  }, [session, status, router]);
 
   const handleFileUpload = async (file: File, type: 'resume' | 'coverLetter') => {
     setError(null);
@@ -64,7 +95,12 @@ export default function ProfilePage() {
       setSuccess(data.message);
       
       // Refresh documents
-      await fetchDocuments();
+      const docsRes = await fetch('/api/user/documents');
+      if (docsRes.ok) {
+        const docsData = await docsRes.json();
+        setResume(docsData.resume);
+        setCoverLetter(docsData.coverLetter);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to upload document');
     } finally {
@@ -92,7 +128,6 @@ export default function ProfilePage() {
 
       setSuccess(`${type === 'resume' ? 'Resume' : 'Cover letter'} deleted successfully`);
       
-      // Update state
       if (type === 'resume') {
         setResume(null);
       } else {
@@ -117,41 +152,95 @@ export default function ProfilePage() {
     });
   };
 
+  if (isLoading || status === 'loading') {
+    return (
+      <MainLayout title="Profile">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!profile) {
+    return null;
+  }
+
+  const fullName = `${profile.firstName} ${profile.lastName}`.trim() || session?.user?.name || 'User';
+  const location = profile.address?.city && profile.address?.state 
+    ? `${profile.address.city}, ${profile.address.state}` 
+    : profile.address?.city || profile.address?.state || '';
+
   return (
     <MainLayout title="Profile">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Profile Header */}
         <Card>
-          <div className="flex items-start gap-6">
+          <div className="flex items-start gap-6 flex-col sm:flex-row">
             <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
               <User className="w-12 h-12 text-white" />
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-textPrimary mb-1">
-                {session?.user?.name || 'User'}
-              </h2>
-              <p className="text-textSecondary mb-4">Senior Frontend Developer</p>
-              <div className="flex flex-wrap gap-6 text-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-textPrimary mb-1">
+                    {fullName}
+                  </h2>
+                  {profile.preferredTitles?.[0] && (
+                    <p className="text-textSecondary mb-4">{profile.preferredTitles[0]}</p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/onboarding')}
+                  className="flex items-center gap-2"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Profile
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-2 text-textSecondary">
                   <Mail className="w-4 h-4" />
-                  <span>{session?.user?.email || 'user@example.com'}</span>
+                  <span>{profile.email || session?.user?.email}</span>
                 </div>
-                <div className="flex items-center gap-2 text-textSecondary">
-                  <MapPin className="w-4 h-4" />
-                  <span>San Francisco, CA</span>
-                </div>
-                <div className="flex items-center gap-2 text-textSecondary">
-                  <Briefcase className="w-4 h-4" />
-                  <span>Available for opportunities</span>
-                </div>
+                {profile.phone && (
+                  <div className="flex items-center gap-2 text-textSecondary">
+                    <Phone className="w-4 h-4" />
+                    <span>{profile.phone}</span>
+                  </div>
+                )}
+                {location && (
+                  <div className="flex items-center gap-2 text-textSecondary">
+                    <MapPin className="w-4 h-4" />
+                    <span>{location}</span>
+                  </div>
+                )}
+                {profile.linkedIn && (
+                  <a 
+                    href={profile.linkedIn.startsWith('http') ? profile.linkedIn : `https://${profile.linkedIn}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-primary hover:underline"
+                  >
+                    <Linkedin className="w-4 h-4" />
+                    <span>LinkedIn</span>
+                  </a>
+                )}
+                {profile.portfolio && (
+                  <a 
+                    href={profile.portfolio.startsWith('http') ? profile.portfolio : `https://${profile.portfolio}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-primary hover:underline"
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span>Portfolio</span>
+                  </a>
+                )}
               </div>
             </div>
-            {resume && (
-              <Button variant="outline" className="flex items-center gap-2">
-                <Download className="w-4 h-4" />
-                Download Resume
-              </Button>
-            )}
           </div>
         </Card>
 
@@ -173,7 +262,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Resume Upload */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -182,15 +271,12 @@ export default function ProfilePage() {
                   Resume
                 </h4>
                 {resume && (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
                     onClick={() => handleDeleteDocument('resume')}
-                    className="text-red-600 hover:text-red-700"
+                    className="text-red-500 hover:text-red-700 text-sm"
                   >
-                    <X className="w-4 h-4 mr-1" />
                     Remove
-                  </Button>
+                  </button>
                 )}
               </div>
               
@@ -198,46 +284,35 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-textPrimary">{resume.fileName}</p>
-                      <p className="text-sm text-textSecondary mt-1">
-                        {formatFileSize(resume.fileSize)} • Uploaded {formatDate(resume.uploadedAt)}
+                      <p className="font-medium text-textPrimary text-sm">{resume.fileName}</p>
+                      <p className="text-xs text-textSecondary mt-1">
+                        {formatFileSize(resume.fileSize)} • {formatDate(resume.uploadedAt)}
                       </p>
                     </div>
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   </div>
                 </div>
               ) : (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <label className="block border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors">
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.txt"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
-                        handleFileUpload(file, 'resume');
-                      }
+                      if (file) handleFileUpload(file, 'resume');
                     }}
                     disabled={uploading !== null}
                     className="hidden"
-                    id="resume-upload"
                   />
-                  <label
-                    htmlFor="resume-upload"
-                    className="flex flex-col items-center justify-center cursor-pointer"
-                  >
-                    {uploading === 'resume' ? (
-                      <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                    )}
-                    <p className="text-sm text-textSecondary text-center">
-                      {uploading === 'resume' ? 'Uploading...' : 'Click to upload resume'}
-                    </p>
-                    <p className="text-xs text-textSecondary mt-1">
-                      PDF, Word, or Text file (max 10MB)
-                    </p>
-                  </label>
-                </div>
+                  {uploading === 'resume' ? (
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                  ) : (
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  )}
+                  <p className="text-sm text-textSecondary">
+                    {uploading === 'resume' ? 'Uploading...' : 'Click to upload'}
+                  </p>
+                </label>
               )}
             </div>
 
@@ -249,15 +324,12 @@ export default function ProfilePage() {
                   Cover Letter
                 </h4>
                 {coverLetter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
                     onClick={() => handleDeleteDocument('coverLetter')}
-                    className="text-red-600 hover:text-red-700"
+                    className="text-red-500 hover:text-red-700 text-sm"
                   >
-                    <X className="w-4 h-4 mr-1" />
                     Remove
-                  </Button>
+                  </button>
                 )}
               </div>
               
@@ -265,98 +337,194 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-textPrimary">{coverLetter.fileName}</p>
-                      <p className="text-sm text-textSecondary mt-1">
-                        {formatFileSize(coverLetter.fileSize)} • Uploaded {formatDate(coverLetter.uploadedAt)}
+                      <p className="font-medium text-textPrimary text-sm">{coverLetter.fileName}</p>
+                      <p className="text-xs text-textSecondary mt-1">
+                        {formatFileSize(coverLetter.fileSize)} • {formatDate(coverLetter.uploadedAt)}
                       </p>
                     </div>
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   </div>
                 </div>
               ) : (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <label className="block border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors">
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.txt"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
-                        handleFileUpload(file, 'coverLetter');
-                      }
+                      if (file) handleFileUpload(file, 'coverLetter');
                     }}
                     disabled={uploading !== null}
                     className="hidden"
-                    id="cover-letter-upload"
                   />
-                  <label
-                    htmlFor="cover-letter-upload"
-                    className="flex flex-col items-center justify-center cursor-pointer"
-                  >
-                    {uploading === 'coverLetter' ? (
-                      <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                    )}
-                    <p className="text-sm text-textSecondary text-center">
-                      {uploading === 'coverLetter' ? 'Uploading...' : 'Click to upload cover letter'}
-                    </p>
-                    <p className="text-xs text-textSecondary mt-1">
-                      PDF, Word, or Text file (max 10MB)
-                    </p>
-                  </label>
-                </div>
+                  {uploading === 'coverLetter' ? (
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                  ) : (
+                    <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  )}
+                  <p className="text-sm text-textSecondary">
+                    {uploading === 'coverLetter' ? 'Uploading...' : 'Click to upload'}
+                  </p>
+                </label>
               )}
             </div>
           </div>
         </Card>
 
-        {/* About Section */}
-        <Card>
-          <h3 className="text-lg font-semibold text-textPrimary mb-4">About</h3>
-          <p className="text-textSecondary leading-relaxed">
-            Experienced frontend developer with a passion for building intuitive and performant web applications. 
-            Skilled in React, TypeScript, and modern web technologies. Always eager to learn and contribute to 
-            innovative projects.
-          </p>
-        </Card>
-
         {/* Skills Section */}
-        <Card>
-          <h3 className="text-lg font-semibold text-textPrimary mb-4">Skills</h3>
-          <div className="flex flex-wrap gap-2">
-            {['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Node.js', 'Git', 'Figma'].map((skill) => (
-              <span
-                key={skill}
-                className="px-3 py-1 bg-primary bg-opacity-10 text-primary rounded-full text-sm font-medium"
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        </Card>
+        {profile.skills && profile.skills.length > 0 && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <Wrench className="w-5 h-5 text-textPrimary" />
+              <h3 className="text-lg font-semibold text-textPrimary">Skills</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {profile.skills.map((skill) => (
+                <span
+                  key={skill}
+                  className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+            {profile.languages && profile.languages.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-textSecondary mb-2">Languages</h4>
+                <div className="flex flex-wrap gap-2">
+                  {profile.languages.map((lang) => (
+                    <span
+                      key={lang}
+                      className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm"
+                    >
+                      {lang}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {profile.certifications && profile.certifications.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-textSecondary mb-2">Certifications</h4>
+                <div className="flex flex-wrap gap-2">
+                  {profile.certifications.map((cert) => (
+                    <span
+                      key={cert}
+                      className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm"
+                    >
+                      {cert}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Experience Section */}
-        <Card>
-          <h3 className="text-lg font-semibold text-textPrimary mb-4">Experience</h3>
-          <div className="space-y-4">
-            <div className="border-l-2 border-gray-200 pl-4">
-              <h4 className="font-semibold text-textPrimary">Senior Frontend Developer</h4>
-              <p className="text-sm text-textSecondary">Tech Company • 2021 - Present</p>
-              <p className="text-sm text-textSecondary mt-2">
-                Led frontend development for multiple products, improved performance by 40%, and mentored junior developers.
-              </p>
+        {profile.experience && profile.experience.length > 0 && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <Briefcase className="w-5 h-5 text-textPrimary" />
+              <h3 className="text-lg font-semibold text-textPrimary">Experience</h3>
             </div>
-            <div className="border-l-2 border-gray-200 pl-4">
-              <h4 className="font-semibold text-textPrimary">Frontend Developer</h4>
-              <p className="text-sm text-textSecondary">Startup Inc. • 2019 - 2021</p>
-              <p className="text-sm text-textSecondary mt-2">
-                Built and maintained multiple web applications, collaborated with cross-functional teams.
-              </p>
+            <div className="space-y-4">
+              {profile.experience.map((exp) => (
+                <div key={exp.id} className="border-l-2 border-indigo-200 pl-4">
+                  <h4 className="font-semibold text-textPrimary">{exp.title}</h4>
+                  <p className="text-sm text-textSecondary">
+                    {exp.company} {exp.location && `• ${exp.location}`}
+                  </p>
+                  <p className="text-xs text-textSecondary mt-1">
+                    {exp.startDate && new Date(exp.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    {' - '}
+                    {exp.current ? 'Present' : exp.endDate && new Date(exp.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  </p>
+                  {exp.description && (
+                    <p className="text-sm text-textSecondary mt-2">{exp.description}</p>
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
+
+        {/* Education Section */}
+        {profile.education && profile.education.length > 0 && (
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <GraduationCap className="w-5 h-5 text-textPrimary" />
+              <h3 className="text-lg font-semibold text-textPrimary">Education</h3>
+            </div>
+            <div className="space-y-4">
+              {profile.education.map((edu) => (
+                <div key={edu.id} className="border-l-2 border-green-200 pl-4">
+                  <h4 className="font-semibold text-textPrimary">{edu.school}</h4>
+                  <p className="text-sm text-textSecondary">
+                    {edu.degree} in {edu.fieldOfStudy}
+                  </p>
+                  {edu.graduationDate && (
+                    <p className="text-xs text-textSecondary mt-1">
+                      {edu.current ? 'Expected ' : ''}
+                      {new Date(edu.graduationDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                  {edu.gpa && (
+                    <p className="text-xs text-textSecondary">GPA: {edu.gpa}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Job Preferences */}
+        {(profile.preferredTitles?.length > 0 || profile.preferredLocations?.length > 0) && (
+          <Card>
+            <h3 className="text-lg font-semibold text-textPrimary mb-4">Job Preferences</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {profile.preferredTitles && profile.preferredTitles.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-textSecondary mb-2">Preferred Roles</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.preferredTitles.map((title) => (
+                      <span key={title} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                        {title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {profile.preferredLocations && profile.preferredLocations.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-textSecondary mb-2">Preferred Locations</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.preferredLocations.map((loc) => (
+                      <span key={loc} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                        {loc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {profile.salaryExpectation && (profile.salaryExpectation.min || profile.salaryExpectation.max) && (
+                <div>
+                  <h4 className="text-sm font-medium text-textSecondary mb-2">Salary Expectation</h4>
+                  <p className="text-sm text-textPrimary">
+                    {profile.salaryExpectation.currency || 'USD'} {profile.salaryExpectation.min?.toLocaleString()} - {profile.salaryExpectation.max?.toLocaleString()} / year
+                  </p>
+                </div>
+              )}
+              {profile.availability && (
+                <div>
+                  <h4 className="text-sm font-medium text-textSecondary mb-2">Availability</h4>
+                  <p className="text-sm text-textPrimary">{profile.availability}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
     </MainLayout>
   );
 }
-

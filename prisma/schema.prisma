@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================
@@ -20,12 +21,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?
-  access_token      String?
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?
+  id_token          String?  @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -81,7 +82,7 @@ model Profile {
   userId    String   @unique
   
   // Encrypted profile data stored as base64 strings
-  encryptedData String   // Base64 encoded encrypted profile JSON
+  encryptedData String   @db.Text // Base64 encoded encrypted profile JSON
   iv            String   // Initialization vector for decryption
   
   createdAt DateTime @default(now())
@@ -112,7 +113,7 @@ model Resume {
   iv          String   // Initialization vector for decryption
   
   // Parsed resume data (optional, for quick access)
-  parsedData  String?  // JSON string of parsed resume
+  parsedData  String?  @db.Text // JSON string of parsed resume
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -143,10 +144,10 @@ model Application {
   appliedDate  DateTime @default(now())
   
   // Additional metadata
-  notes        String?
+  notes        String?  @db.Text
   deadline     String?
   salary       String?
-  metadata     String?  // JSON string for any additional data
+  metadata     String?  @db.Text // JSON string for any additional data
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
