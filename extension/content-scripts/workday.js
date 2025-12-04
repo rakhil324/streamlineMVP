@@ -186,17 +186,43 @@ class WorkdayHandler {
           'input[aria-label*="phone" i]',
           'input[placeholder*="phone" i]',
         ]),
-        location: this.findField([
-          'input[data-automation-id="location"]',
-          'input[data-automation-id*="location"]',
-          'input[name*="location" i]',
+        location: this.findAddressField([
+          // Prioritize address-specific city fields (exclude work experience location)
+          'input[data-automation-id*="address"][data-automation-id*="city" i]',
+          'input[id*="address"][id*="city" i]',
+          'input[name*="address"][name*="city" i]',
+          // Generic city fields (will be checked to ensure not in experience section)
+          'input[data-automation-id*="city" i]',
           'input[name*="city" i]',
-          'input[aria-label*="location" i]',
+          'input[id*="city" i]',
           'input[aria-label*="city" i]',
-          'input[placeholder*="location" i]',
           'input[placeholder*="city" i]',
         ]),
-        state: this.findField([
+        street: this.findField([
+          'input[data-automation-id*="addressLine" i]',
+          'input[data-automation-id*="address1" i]',
+          'input[data-automation-id*="street" i]',
+          'input[name*="addressLine" i]',
+          'input[name*="address1" i]',
+          'input[name*="street" i]',
+          'input[id*="addressLine" i]',
+          'input[id*="address1" i]',
+          'input[id*="street" i]',
+          'input[aria-label*="address line" i]',
+          'input[aria-label*="street" i]',
+          'input[placeholder*="street" i]',
+          'input[placeholder*="address" i]',
+          // Workday patterns
+          'input[id*="address--addressLine1" i]',
+          'input[name*="address--addressLine1" i]',
+        ]),
+        state: this.findAddressField([
+          // Prioritize address-specific state fields
+          'select[id*="address"][id*="state" i]',
+          'select[name*="address"][name*="state" i]',
+          'input[id*="address"][id*="state" i]',
+          'input[name*="address"][name*="state" i]',
+          // Generic state fields (checked to not be in experience section)
           'select[data-automation-id*="state" i]',
           'select[name*="state" i]',
           'select[id*="state" i]',
@@ -205,11 +231,24 @@ class WorkdayHandler {
           'input[id*="state" i]',
           'input[aria-label*="state" i]',
           'input[aria-label*="province" i]',
-          // Workday pattern: address--state
-          'input[id*="address" i][id*="state" i]',
-          'select[id*="address" i][id*="state" i]',
-          'input[name*="address" i][name*="state" i]',
-          'select[name*="address" i][name*="state" i]',
+        ]),
+        zip: this.findAddressField([
+          // Prioritize address-specific zip fields
+          'input[id*="address"][id*="postal" i]',
+          'input[name*="address"][name*="postal" i]',
+          'input[id*="postalCode" i]',
+          'input[name*="postalCode" i]',
+          // Generic zip fields
+          'input[data-automation-id*="postal" i]',
+          'input[data-automation-id*="zip" i]',
+          'input[name*="postal" i]',
+          'input[name*="zip" i]',
+          'input[id*="postal" i]',
+          'input[id*="zip" i]',
+          'input[aria-label*="postal" i]',
+          'input[aria-label*="zip" i]',
+          'input[placeholder*="postal" i]',
+          'input[placeholder*="zip" i]',
         ]),
         resume: this.findField([
           'input[type="file"][accept*="pdf"]',
@@ -332,6 +371,65 @@ class WorkdayHandler {
       }
     }
     
+    return null;
+  }
+
+  /**
+   * Check if a field is inside a work experience or education section
+   * Used to exclude these fields when filling personal address information
+   */
+  isInsideExperienceOrEducation(field) {
+    if (!field) return false;
+    
+    // Check the element and its ancestors for experience/education markers
+    let current = field;
+    while (current && current !== document.body) {
+      const id = (current.id || '').toLowerCase();
+      const className = (current.className || '').toLowerCase();
+      const dataAutomationId = (current.getAttribute('data-automation-id') || '').toLowerCase();
+      
+      // Check for work experience markers
+      if (id.includes('workexperience') || id.includes('work-experience') ||
+          className.includes('workexperience') || className.includes('work-experience') ||
+          dataAutomationId.includes('workexperience') || dataAutomationId.includes('work-experience') ||
+          id.includes('experience') && !id.includes('address') ||
+          dataAutomationId.includes('experience') && !dataAutomationId.includes('address')) {
+        return true;
+      }
+      
+      // Check for education markers  
+      if (id.includes('education') || className.includes('education') ||
+          dataAutomationId.includes('education')) {
+        return true;
+      }
+      
+      current = current.parentElement;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Find address-related fields, excluding those inside work experience or education sections
+   */
+  findAddressField(selectors) {
+    for (const selector of selectors) {
+      try {
+        const fields = document.querySelectorAll(selector);
+        for (const field of fields) {
+          if (field && this.isFieldValid(field) && !this.isInsideExperienceOrEducation(field)) {
+            return {
+              element: field,
+              selector: selector,
+              type: field.type || field.tagName.toLowerCase(),
+            };
+          }
+        }
+      } catch (e) {
+        // Invalid selector, skip
+        console.warn('Invalid selector:', selector, e);
+      }
+    }
     return null;
   }
 
@@ -669,6 +767,385 @@ class WorkdayHandler {
    */
   async delay(ms = 200) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Fill Workday's autocomplete/typeahead fields (like Field of Study)
+   * Uses keyboard navigation (ArrowDown) to scroll through options and find exact match
+   */
+  async fillWorkdayAutocomplete(element, value) {
+    if (!element || !value) return false;
+    
+    try {
+      console.log(`🔵 Workday Autocomplete fill: "${value}"`);
+      const valueLower = value.toLowerCase().trim();
+      
+      // Scroll into view first
+      this.scrollIntoViewAndHighlight(element);
+      
+      // Step 1: Focus and click the input to activate it
+      element.focus();
+      element.click();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Step 2: Clear existing value
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      
+      if (nativeValueSetter) {
+        nativeValueSetter.call(element, '');
+      } else {
+        element.value = '';
+      }
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Step 3: Type the value to trigger autocomplete dropdown
+      console.log(`  📝 Typing "${value}"...`);
+      if (nativeValueSetter) {
+        nativeValueSetter.call(element, value);
+      } else {
+        element.value = value;
+      }
+      
+      // Trigger input events
+      element.dispatchEvent(new InputEvent('input', {
+        bubbles: true, cancelable: true,
+        inputType: 'insertText', data: value
+      }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Update React state
+      if (element._valueTracker) {
+        element._valueTracker.setValue('');
+        element._valueTracker.setValue(value);
+      }
+      this.updateReactState(element, value);
+      
+      // Step 4: Wait for dropdown to appear
+      console.log(`  ⏳ Waiting for dropdown...`);
+      await new Promise(resolve => setTimeout(resolve, 600));
+      
+      // Step 5: Use KEYBOARD NAVIGATION to find the exact match
+      // This is the most reliable method - scroll through options with ArrowDown
+      console.log(`  🔽 Using keyboard navigation to find exact match "${value}"...`);
+      
+      element.focus();
+      let found = false;
+      let bestMatchIndex = -1;
+      let bestMatchScore = -1;
+      let bestMatchText = '';
+      const maxOptions = 30; // Maximum options to check
+      const seenOptions = [];
+      
+      // Helper to get currently highlighted option text
+      const getHighlightedText = () => {
+        // Try to read the input value (Workday updates it as you navigate)
+        const inputValue = element.value || '';
+        
+        // Also look for highlighted option element
+        const highlighted = document.querySelector(
+          '[role="option"][aria-selected="true"], ' +
+          '[data-automation-id*="promptOption"][aria-selected="true"], ' +
+          '[role="option"]:focus, ' +
+          'li[aria-selected="true"], ' +
+          '[class*="css"][aria-selected="true"]'
+        );
+        
+        if (highlighted) {
+          const text = (highlighted.innerText || highlighted.textContent || '').trim();
+          return text;
+        }
+        
+        return inputValue;
+      };
+      
+      // Navigate through options
+      for (let i = 0; i < maxOptions; i++) {
+        // Press ArrowDown
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+        }));
+        element.dispatchEvent(new KeyboardEvent('keyup', {
+          bubbles: true, cancelable: true,
+          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+        }));
+        
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Get the current option text
+        const currentText = getHighlightedText();
+        const currentTextLower = currentText.toLowerCase().trim();
+        
+        console.log(`    Option ${i + 1}: "${currentText}"`);
+        
+        // Check if we've seen this option before (means we've looped)
+        if (seenOptions.includes(currentTextLower)) {
+          console.log(`  ↩️ Looped back to beginning, stopping navigation`);
+          break;
+        }
+        seenOptions.push(currentTextLower);
+        
+        // Check for EXACT match
+        if (currentTextLower === valueLower) {
+          console.log(`  🎯 EXACT MATCH FOUND at position ${i + 1}!`);
+          found = true;
+          
+          // Press Enter to select this option
+          element.dispatchEvent(new KeyboardEvent('keydown', {
+            bubbles: true, cancelable: true,
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+          }));
+          element.dispatchEvent(new KeyboardEvent('keyup', {
+            bubbles: true, cancelable: true,
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+          }));
+          
+          await new Promise(resolve => setTimeout(resolve, 200));
+          break;
+        }
+        
+        // Track best match (shortest option that contains our value, or starts with it)
+        if (currentTextLower.includes(valueLower) || valueLower.includes(currentTextLower) ||
+            currentTextLower.startsWith(valueLower.substring(0, 3))) {
+          // Score: exact length match > starts with > contains > shorter is better
+          const isStartsWith = currentTextLower.startsWith(valueLower);
+          const currentScore = isStartsWith ? 1000 - currentText.length : 500 - currentText.length;
+          
+          if (bestMatchIndex === -1 || currentScore > bestMatchScore) {
+            bestMatchIndex = i;
+            bestMatchScore = currentScore;
+            bestMatchText = currentText;
+          }
+        }
+      }
+      
+      // If no exact match found, fallback to best match
+      if (!found) {
+        console.log(`  ⚠️ No exact match found after checking ${seenOptions.length} options`);
+        console.log(`  📋 Options seen: ${seenOptions.slice(0, 5).join(', ')}${seenOptions.length > 5 ? '...' : ''}`);
+        
+        if (bestMatchIndex >= 0 && seenOptions.length > 0) {
+          console.log(`  🔄 Falling back to best match: "${bestMatchText}" at position ${bestMatchIndex + 1}`);
+          
+          // Navigate back to the best match
+          // First, press Escape to reset, then re-open and navigate
+          element.dispatchEvent(new KeyboardEvent('keydown', {
+            bubbles: true, cancelable: true,
+            key: 'Escape', code: 'Escape', keyCode: 27, which: 27
+          }));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Re-focus and trigger dropdown
+          element.focus();
+          element.click();
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Navigate to the best match position
+          for (let j = 0; j <= bestMatchIndex; j++) {
+            element.dispatchEvent(new KeyboardEvent('keydown', {
+              bubbles: true, cancelable: true,
+              key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+            }));
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          // Select it
+          console.log(`  ✅ Selecting fallback option: "${bestMatchText}"`);
+          element.dispatchEvent(new KeyboardEvent('keydown', {
+            bubbles: true, cancelable: true,
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+          }));
+          await new Promise(resolve => setTimeout(resolve, 200));
+          found = true;
+        } else {
+          // No options at all - just leave the typed value
+          console.log(`  ⚠️ No matching options found, keeping typed value`);
+          element.dispatchEvent(new KeyboardEvent('keydown', {
+            bubbles: true, cancelable: true,
+            key: 'Escape', code: 'Escape', keyCode: 27, which: 27
+          }));
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      // Step 6: Blur to close dropdown
+      element.blur();
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const finalValue = element.value || '';
+      console.log(`  Workday Autocomplete result: "${finalValue}"`);
+      
+      if (finalValue.length > 0) {
+        this.showFieldFilled(element);
+        return true;
+      }
+      
+      return false;
+      
+    } catch (error) {
+      console.error('Error in fillWorkdayAutocomplete:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Fill a typeahead/autocomplete dropdown by typing and selecting from dropdown
+   * This works for Workday fields like "Field of Study" that filter as you type
+   */
+  async fillTypeAndSelectDropdown(element, value) {
+    if (!element || !value) return false;
+    
+    try {
+      console.log(`🔵 Type-and-select dropdown: "${value}"`);
+      
+      // Scroll into view
+      this.scrollIntoViewAndHighlight(element);
+      
+      // Focus and click to open dropdown
+      element.focus();
+      element.click();
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      // Clear existing value with proper React handling
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      
+      if (nativeValueSetter) {
+        nativeValueSetter.call(element, '');
+      } else {
+        element.value = '';
+      }
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Type the value character by character to trigger autocomplete filtering
+      let typedValue = '';
+      for (const char of value) {
+        typedValue += char;
+        
+        if (nativeValueSetter) {
+          nativeValueSetter.call(element, typedValue);
+        } else {
+          element.value = typedValue;
+        }
+        
+        // Update React state tracker
+        if (element._valueTracker) {
+          element._valueTracker.setValue(typedValue);
+        }
+        
+        // Trigger input event for each character
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: char
+        }));
+        
+        // Small delay between characters to allow dropdown to filter
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      
+      // Wait for dropdown to populate and filter
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Try to find and click matching option
+      let optionClicked = false;
+      const valueLower = value.toLowerCase();
+      
+      // Look for visible dropdown options using multiple selectors
+      const optionSelectors = [
+        '[role="option"]',
+        '[role="listbox"] [role="option"]',
+        'ul[role="listbox"] li',
+        '[data-automation-id*="promptOption"]',
+        '[data-automation-id*="option"]',
+        'li[data-automation-id]',
+        '[class*="dropdown"] li',
+        '[class*="menu"] li',
+        '[class*="options"] li',
+        '[class*="suggestion"]'
+      ];
+      
+      for (const selector of optionSelectors) {
+        if (optionClicked) break;
+        
+        const options = document.querySelectorAll(selector);
+        for (const option of options) {
+          // Check if option is visible
+          const rect = option.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          if (!option.offsetParent && window.getComputedStyle(option).position !== 'fixed') continue;
+          
+          const text = (option.textContent || '').toLowerCase().trim();
+          
+          // Check for various match types
+          const isExactMatch = text === valueLower;
+          const startsWithMatch = text.startsWith(valueLower);
+          const containsMatch = text.includes(valueLower);
+          const valueContainsOption = valueLower.includes(text.split(' ')[0]);
+          
+          if (isExactMatch || startsWithMatch || containsMatch || valueContainsOption) {
+            console.log(`  ✅ Found matching option: "${option.textContent?.trim()}" (match type: ${isExactMatch ? 'exact' : startsWithMatch ? 'starts' : containsMatch ? 'contains' : 'partial'})`);
+            
+            // Click the option
+            option.click();
+            optionClicked = true;
+            await new Promise(resolve => setTimeout(resolve, 150));
+            break;
+          }
+        }
+      }
+      
+      // If no option clicked, try keyboard navigation
+      if (!optionClicked) {
+        console.log('  No matching option found via click, trying keyboard selection');
+        
+        // Press ArrowDown to select first option
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+        }));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Press Enter to confirm selection
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+        }));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        element.dispatchEvent(new KeyboardEvent('keyup', {
+          bubbles: true, cancelable: true,
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+        }));
+      }
+      
+      // Trigger blur/change to finalize
+      await new Promise(resolve => setTimeout(resolve, 100));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      element.blur();
+      
+      const finalValue = element.value || '';
+      console.log(`  Type-and-select result: "${finalValue}"`);
+      
+      if (finalValue.length > 0) {
+        this.showFieldFilled(element);
+        return true;
+      }
+      
+      return false;
+      
+    } catch (error) {
+      console.error('Error in fillTypeAndSelectDropdown:', error);
+      return false;
+    }
   }
 
   /**
@@ -1010,7 +1487,7 @@ class WorkdayHandler {
         console.warn('firstName data provided but field not found. Available fields:', Object.keys(this.fields));
         // Try to re-detect fields
         this.detectFields();
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
         if (this.fields.firstName) {
           const filled = await this.fillField(this.fields.firstName.element, data.firstName);
           if (filled) {
@@ -1066,6 +1543,52 @@ class WorkdayHandler {
           }
         }
       }
+
+      // Handle street address
+      const streetAddress = data.street || data.address?.street || '';
+      if (streetAddress) {
+        console.log(`🔵 Attempting to fill street address with value: "${streetAddress}"`);
+        
+        // First check if we have a detected street field
+        if (this.fields.street) {
+          const filled = await this.fillField(this.fields.street.element, streetAddress);
+          if (filled) {
+            filledCount++;
+            console.log('✅ Filled street address:', streetAddress);
+          } else {
+            console.warn('⚠️ Failed to fill detected street address field');
+          }
+        } else {
+          // Try to find street address field dynamically
+          console.log('🔍 Searching for Street Address field...');
+          const streetField = this.findField([
+            'input[data-automation-id*="addressLine" i]',
+            'input[data-automation-id*="address1" i]',
+            'input[data-automation-id*="street" i]',
+            'input[name*="addressLine" i]',
+            'input[name*="address1" i]',
+            'input[name*="street" i]',
+            'input[id*="addressLine" i]',
+            'input[id*="address1" i]',
+            'input[id*="street" i]',
+            'input[aria-label*="address line" i]',
+            'input[aria-label*="street" i]',
+            'input[placeholder*="street" i]',
+            'input[placeholder*="address line" i]',
+          ]);
+          
+          if (streetField) {
+            console.log('✅ Found Street Address field:', streetField);
+            const filled = await this.fillField(streetField.element, streetAddress);
+            if (filled) {
+              filledCount++;
+              console.log('✅ Filled street address:', streetAddress);
+            }
+          } else {
+            console.warn('⚠️ Street Address field not found');
+          }
+        }
+      }
       
       // Handle location - might need to split into city, state, etc.
       if (data.location) {
@@ -1115,9 +1638,9 @@ class WorkdayHandler {
         } else {
           console.warn('⚠️ location field not found in detected fields');
           
-          // Try to find city field specifically
-          console.log('🔍 Searching for City field...');
-          const cityField = this.findField([
+          // Try to find city field specifically (using address-aware search)
+          console.log('🔍 Searching for City field (excluding experience/education sections)...');
+          const cityField = this.findAddressField([
             'input[data-automation-id*="city" i]',
             'input[name*="city" i]',
             'input[id*="city" i]',
@@ -1127,7 +1650,6 @@ class WorkdayHandler {
           
           if (cityField) {
             console.log('✅ Found City field:', cityField);
-            // Extract city from location (e.g., "Ashburn, VA, USA" -> "Ashburn")
             const cityValue = city;
             console.log(`  Extracted city: "${cityValue}" from location: "${data.location}"`);
             const filled = await this.fillField(cityField.element, cityValue);
@@ -1136,41 +1658,7 @@ class WorkdayHandler {
               console.log('✅ Filled city:', cityValue);
             }
           } else {
-            console.warn('⚠️ City field also not found');
-            
-            // Try to find any field that might be related to location
-            const allInputs = Array.from(document.querySelectorAll('input[type="text"]'));
-            for (const input of allInputs) {
-              if (input.offsetParent === null) continue; // Skip hidden
-              
-              const label = input.closest('label')?.textContent?.trim() || 
-                           document.querySelector(`label[for="${input.id}"]`)?.textContent?.trim() ||
-                           input.getAttribute('aria-label') ||
-                           input.placeholder ||
-                           '';
-              
-              const searchText = `${label} ${input.id} ${input.name} ${input.getAttribute('data-automation-id')}`.toLowerCase();
-              
-              if (searchText.includes('city') || searchText.includes('location') || searchText.includes('address')) {
-                console.log(`  Found potential location-related field:`, {
-                  element: input,
-                  label: label,
-                  id: input.id,
-                  name: input.name,
-                  'data-automation-id': input.getAttribute('data-automation-id'),
-                  required: input.required
-                });
-                
-                // Try filling it
-                const cityValue = city;
-                const filled = await this.fillField(input, cityValue);
-                if (filled) {
-                  filledCount++;
-                  console.log(`✅ Filled location-related field with: "${cityValue}"`);
-                  break;
-                }
-              }
-            }
+            console.warn('⚠️ City field not found (skipping fallback search to avoid filling experience fields)');
           }
         }
         
@@ -1259,13 +1747,50 @@ class WorkdayHandler {
                   }
                 }
               }
-            } else {
-              console.warn('⚠️ State field not found with standard selectors');
-              
-              // Try to find state field by looking near the city field
-              if (this.fields.location) {
-                const cityField = this.fields.location.element;
-                console.log('🔍 City field found:', { id: cityField.id, name: cityField.name });
+          } else {
+            console.warn('⚠️ State field not found with standard selectors');
+            
+            // Try Workday-specific patterns first
+            console.log('🔍 Trying Workday-specific state field patterns...');
+            
+            // Workday often uses buttons for state/country dropdowns
+            const workdayStateSelectors = [
+              'button[id*="state" i]',
+              'button[id*="region" i]',
+              'button[data-automation-id*="state" i]',
+              'button[data-automation-id*="region" i]',
+              '[data-automation-id="selectWidget"][id*="state" i]',
+              'div[id*="state" i][role="listbox"]',
+              'div[id*="state" i][aria-haspopup]',
+              // Pattern: address--state or addressSection--state
+              'button[id*="address"][id*="state" i]',
+              'button[id*="countryRegion" i]',
+            ];
+            
+            for (const selector of workdayStateSelectors) {
+              try {
+                const stateBtn = document.querySelector(selector);
+                if (stateBtn && stateBtn.offsetParent !== null) {
+                  console.log(`  ✅ Found Workday state button with selector: ${selector}`);
+                  console.log(`    Element: ${stateBtn.tagName} id="${stateBtn.id}"`);
+                  
+                  // Use custom dropdown for Workday buttons
+                  const filled = await this.fillCustomDropdown(stateBtn, state);
+                  if (filled) {
+                    filledCount++;
+                    console.log('✅ Filled state via Workday button dropdown:', state);
+                    break;
+                  }
+                }
+              } catch (e) {
+                console.log(`  Selector "${selector}" failed:`, e.message);
+              }
+            }
+            
+            // If still not found, try to find state field by looking near the city field
+            if (this.fields.location) {
+              const cityField = this.fields.location.element;
+              console.log('🔍 City field found:', { id: cityField.id, name: cityField.name });
                 
                 // Try multiple container strategies
                 let cityContainer = cityField.closest('div[class*="input"], div[class*="field"], fieldset, form') || 
@@ -1455,6 +1980,54 @@ class WorkdayHandler {
         }
       }
 
+      // Fill Zip Code / Postal Code field
+      const zipCode = data.zip || data.address?.zip || '';
+      if (zipCode) {
+        console.log(`🔵 Attempting to fill zip code with value: "${zipCode}"`);
+        
+        // First check if we have a detected zip field
+        if (this.fields.zip) {
+          console.log('  Found zip field in detected fields');
+          const filled = await this.fillField(this.fields.zip.element, zipCode);
+          if (filled) {
+            filledCount++;
+            console.log('✅ Filled zip code:', zipCode);
+          } else {
+            console.warn('⚠️ Failed to fill zip code field');
+          }
+        } else {
+          // Try to find zip field dynamically
+          console.log('🔍 Searching for Zip/Postal Code field...');
+          const zipField = this.findField([
+            'input[data-automation-id*="postal" i]',
+            'input[data-automation-id*="zip" i]',
+            'input[name*="postal" i]',
+            'input[name*="zip" i]',
+            'input[id*="postal" i]',
+            'input[id*="zip" i]',
+            'input[aria-label*="postal" i]',
+            'input[aria-label*="zip" i]',
+            'input[placeholder*="postal" i]',
+            'input[placeholder*="zip" i]',
+            'input[id*="postalCode" i]',
+            'input[name*="postalCode" i]',
+          ]);
+          
+          if (zipField) {
+            console.log('✅ Found Zip Code field:', zipField);
+            const filled = await this.fillField(zipField.element, zipCode);
+            if (filled) {
+              filledCount++;
+              console.log('✅ Filled zip code:', zipCode);
+            } else {
+              console.warn('⚠️ Failed to fill zip code field');
+            }
+          } else {
+            console.warn('⚠️ Zip Code field not found');
+          }
+        }
+      }
+
       // Handle work experience entries
       console.log('🔵 ========== WORK EXPERIENCE SECTION ==========');
       console.log('  Experience data:', data.experience);
@@ -1510,44 +2083,28 @@ class WorkdayHandler {
       }
 
       // Wait a bit for all fields to be processed
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // CRITICAL: Re-update React state for all filled fields one more time
-      // Also focus/blur each field to trigger validation
-      console.log('🔵 Re-updating React state for all filled fields...');
+      // CRITICAL: Re-update React state for key fields one more time (NOT location)
+      // Location is skipped because it might have been detected incorrectly inside experience sections
+      console.log('🔵 Re-updating React state for key fields (excluding location)...');
       const fieldsToUpdate = [
         { key: 'firstName', data: data.firstName },
         { key: 'lastName', data: data.lastName },
-        { key: 'phone', data: data.phone ? this.formatPhoneNumber(data.phone) : null },
-        { key: 'location', data: data.location }
+        { key: 'phone', data: data.phone ? this.formatPhoneNumber(data.phone) : null }
+        // Location removed - it's handled separately with proper address field detection
       ];
       
       for (const fieldInfo of fieldsToUpdate) {
         if (fieldInfo.data && this.fields[fieldInfo.key]) {
           const field = this.fields[fieldInfo.key];
-          let valueToUse = fieldInfo.data;
-          
-          // Special handling for location
-          if (fieldInfo.key === 'location' && typeof valueToUse === 'string') {
-            const locationParts = valueToUse.split(',').map(p => p.trim());
-            const city = locationParts[0] || '';
-            const fieldElement = field.element;
-            const fieldId = fieldElement.id || '';
-            const fieldName = fieldElement.name || '';
-            const isCityField = fieldId.toLowerCase().includes('city') || 
-                               fieldName.toLowerCase().includes('city') ||
-                               fieldId === 'address--city' ||
-                               fieldName === 'city';
-            valueToUse = isCityField ? city : valueToUse;
-          }
+          const valueToUse = fieldInfo.data;
           
           // Focus the field
           field.element.focus();
-          await new Promise(resolve => setTimeout(resolve, 50));
           
           // Update React state
           this.updateReactState(field.element, valueToUse);
-          await new Promise(resolve => setTimeout(resolve, 100));
           
           // Trigger input event
           field.element.dispatchEvent(new InputEvent('input', {
@@ -1556,19 +2113,15 @@ class WorkdayHandler {
             inputType: 'insertText',
             data: valueToUse
           }));
-          await new Promise(resolve => setTimeout(resolve, 50));
           
           // Trigger change event
           field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-          await new Promise(resolve => setTimeout(resolve, 50));
           
           // Blur to trigger validation
           field.element.blur();
-          await new Promise(resolve => setTimeout(resolve, 100));
           
           // Update React state one more time after blur
           this.updateReactState(field.element, valueToUse);
-          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
@@ -1576,12 +2129,12 @@ class WorkdayHandler {
       this.triggerEvents();
 
       // Additional wait to ensure validation completes
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Verify critical fields were filled (especially firstName)
       if (data.firstName && this.fields.firstName) {
         // Wait longer for React to process
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         const currentValue = this.fields.firstName.element.value || '';
         console.log('First Name field value after fill:', currentValue);
@@ -1590,7 +2143,7 @@ class WorkdayHandler {
           console.warn('⚠️ First Name field appears empty after fill. Attempting re-fill...');
           // Try one more time with a different approach
           await this.fillField(this.fields.firstName.element, data.firstName);
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 100));
         } else {
           // Field has value, ensure React state is updated
           console.log('First Name has value, updating React state...');
@@ -1622,7 +2175,7 @@ class WorkdayHandler {
       }
 
       // Final validation trigger - click outside or trigger form validation
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // CRITICAL: One final pass to update React state for all fields
       console.log('🔵 Final React state update pass...');
@@ -1654,13 +2207,13 @@ class WorkdayHandler {
         }
       });
       
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Try to find and trigger Workday's validation
       this.triggerWorkdayValidation();
       
       // Wait one more time for validation to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       console.log(`✅ Autofill complete. Filled ${filledCount} fields.`);
       
@@ -1726,30 +2279,41 @@ class WorkdayHandler {
               }
             }
           }
+          // Street Address fields (Address Line 1, Street)
+          else if (searchText.includes('street') || searchText.includes('address line') || searchText.includes('addressline')) {
+            // Use street from profile data directly
+            if (data.street || data.address?.street) {
+              valueToFill = data.street || data.address?.street;
+            }
+          }
           // State field
           else if (searchText.includes('state') && !searchText.includes('address')) {
-            // Extract state from location (e.g., "Ashburn, VA, USA" -> "VA" or "Ashburn, Virginia" -> "Virginia")
-            if (data.location) {
+            // Use state from profile data directly
+            if (data.state || data.address?.state) {
+              valueToFill = data.state || data.address?.state;
+            } else if (data.location) {
+              // Fallback: Extract state from location (e.g., "Ashburn, VA, USA" -> "VA" or "Ashburn, Virginia" -> "Virginia")
               const parts = data.location.split(',').map(p => p.trim());
               if (parts.length >= 2) {
                 // State is usually the second part (could be "VA" or "Virginia")
                 valueToFill = parts[1];
-                // Remove country if present (e.g., "VA, USA" -> "VA")
-                if (parts.length > 2 && parts[2].toLowerCase() === 'usa') {
-                  // Already have the state part
-                }
               }
             }
           }
           // Postal Code / Zip Code
           else if (searchText.includes('postal') || searchText.includes('zip')) {
-            // Try to extract from location (e.g., "Ashburn, VA 20147, USA")
-            const parts = data.location?.split(',') || [];
-            if (parts.length >= 2) {
-              // Look for zip code pattern in the parts
-              const zipMatch = parts.find(p => /\d{5}/.test(p.trim()));
-              if (zipMatch) {
-                valueToFill = zipMatch.trim().match(/\d{5}(-\d{4})?/)?.[0] || '';
+            // Use zip from profile data directly
+            if (data.zip || data.address?.zip) {
+              valueToFill = data.zip || data.address?.zip;
+            } else {
+              // Fallback: Try to extract from location (e.g., "Ashburn, VA 20147, USA")
+              const parts = data.location?.split(',') || [];
+              if (parts.length >= 2) {
+                // Look for zip code pattern in the parts
+                const zipMatch = parts.find(p => /\d{5}/.test(p.trim()));
+                if (zipMatch) {
+                  valueToFill = zipMatch.trim().match(/\d{5}(-\d{4})?/)?.[0] || '';
+                }
               }
             }
           }
@@ -1824,9 +2388,15 @@ class WorkdayHandler {
       valueToSet: value
     });
 
+    // Scroll element into view so user can see the autofill happening
+    this.scrollIntoViewAndHighlight(element);
+    await new Promise(resolve => setTimeout(resolve, 30)); // Brief pause for scroll
+
     // Handle select elements (dropdowns) differently
     if (element.tagName === 'SELECT') {
-      return await this.fillSelectDropdown(element, value);
+      const result = await this.fillSelectDropdown(element, value);
+      if (result) this.showFieldFilled(element);
+      return result;
     }
     
     // Identify fields that are KNOWN to be dropdowns (only these should use dropdown logic)
@@ -1883,6 +2453,7 @@ class WorkdayHandler {
         
         // Verify React state was updated by checking if value persists
         if (finalValue === value || finalValue.length > 0) {
+          this.showFieldFilled(element);
           return true;
         }
       }
@@ -1902,6 +2473,7 @@ class WorkdayHandler {
         console.log(`  Final value: "${finalValue}"`);
         
         if (finalValue === value || finalValue.length > 0) {
+          this.showFieldFilled(element);
           return true;
         }
       }
@@ -1964,6 +2536,7 @@ class WorkdayHandler {
       const finalValue = element.value || '';
       const success = finalValue === value || finalValue.length > 0;
       console.log(`  ${success ? '✅' : '✗'} Method 3 ${success ? 'succeeded' : 'failed'}, final value: "${finalValue}"`);
+      if (success) this.showFieldFilled(element);
       return success;
     } catch (error) {
       console.error('❌ Error in fillField:', error);
@@ -1971,21 +2544,88 @@ class WorkdayHandler {
     }
   }
 
-  // Simulate actual user typing character by character
+  /**
+   * Scroll element into view and add a highlight effect
+   */
+  scrollIntoViewAndHighlight(element) {
+    if (!element) return;
+    
+    try {
+      // Scroll into view with instant behavior for speed
+      element.scrollIntoView({ 
+        behavior: 'instant', 
+        block: 'center',
+        inline: 'nearest'
+      });
+      
+      // Add temporary highlight to show which field is being filled
+      const originalBorder = element.style.border;
+      const originalBoxShadow = element.style.boxShadow;
+      const originalBackground = element.style.backgroundColor;
+      
+      element.style.border = '2px solid #3b82f6';
+      element.style.boxShadow = '0 0 8px rgba(59, 130, 246, 0.4)';
+      element.style.backgroundColor = '#eff6ff';
+      element.style.transition = 'all 0.15s ease';
+      
+      // Remove highlight quickly
+      setTimeout(() => {
+        element.style.border = originalBorder || '';
+        element.style.boxShadow = originalBoxShadow || '';
+        element.style.backgroundColor = originalBackground || '';
+      }, 300);
+    } catch (e) {
+      console.warn('Could not scroll/highlight element:', e);
+    }
+  }
+
+  /**
+   * Show visual feedback that a field was successfully filled
+   */
+  showFieldFilled(element) {
+    if (!element) return;
+    
+    try {
+      // Flash green to indicate success
+      const originalBorder = element.style.border;
+      const originalBoxShadow = element.style.boxShadow;
+      const originalBackground = element.style.backgroundColor;
+      
+      element.style.border = '2px solid #10b981';
+      element.style.boxShadow = '0 0 8px rgba(16, 185, 129, 0.4)';
+      element.style.backgroundColor = '#ecfdf5';
+      element.style.transition = 'all 0.15s ease';
+      
+      // Fade back to normal quickly
+      setTimeout(() => {
+        element.style.border = originalBorder || '';
+        element.style.boxShadow = originalBoxShadow || '';
+        element.style.backgroundColor = originalBackground || '';
+      }, 500);
+    } catch (e) {
+      console.warn('Could not show field filled feedback:', e);
+    }
+  }
+
+  // Simulate actual user typing - FAST version
   async simulateTyping(element, value) {
     return new Promise((resolve) => {
       try {
         element.focus();
-        element.select();
+        if (element.select) element.select();
         
-        // Clear existing value - get setter in outer scope
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
+        // Determine if this is a textarea or input
+        const isTextarea = element.tagName === 'TEXTAREA';
+        
+        // Get the appropriate setter
+        const nativeValueSetter = Object.getOwnPropertyDescriptor(
+          isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
           'value'
         )?.set;
         
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(element, '');
+        // Clear existing value
+        if (nativeValueSetter) {
+          nativeValueSetter.call(element, '');
         } else {
           element.value = '';
         }
@@ -1994,142 +2634,55 @@ class WorkdayHandler {
         element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
         element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
         
-        // Wait a bit, then type each character
+        // FAST: Set value immediately instead of character by character
         setTimeout(() => {
-          let index = 0;
-          const typeNextChar = () => {
-            if (index >= value.length) {
-              // Done typing, ensure value is set correctly
-              const setter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype,
-                'value'
-              )?.set;
-              
-              if (setter) {
-                setter.call(element, value);
-              } else {
-                element.value = value;
-              }
-              
-              // Update React's value tracker if it exists
-              if (element._valueTracker) {
-                element._valueTracker.setValue('');
-                element._valueTracker.setValue(value);
-              }
-              
-              // CRITICAL: Update React state BEFORE triggering events
-              this.updateReactState(element, value);
-              
-              // Wait a bit for React state to update
-              setTimeout(() => {
-                // Trigger final events in proper sequence
-                element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                
-                // Wait a bit, then trigger change
-                setTimeout(() => {
-                  element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                  
-                  // Trigger one more input event with InputEvent
-                  setTimeout(() => {
-                    const finalInputEvent = new InputEvent('input', {
-                      bubbles: true,
-                      cancelable: true,
-                      inputType: 'insertText',
-                      data: value
-                    });
-                    element.dispatchEvent(finalInputEvent);
-                    
-                    // Update React state one more time after events
-                    this.updateReactState(element, value);
-                    
-                    // Wait a bit more then blur
-                    setTimeout(() => {
-                      element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
-                      
-                      // Keep focus for a moment to ensure validation sees the value
-                      setTimeout(() => {
-                        element.blur();
-                        
-                        // Final React state update and verification
-                        setTimeout(() => {
-                          // Final React state update
-                          this.updateReactState(element, value);
-                          
-                          // Trigger one final change event to ensure validation runs
-                          element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                          
-                          const finalValue = element.value || '';
-                          console.log('Typing simulation complete. Value:', finalValue, 'Expected:', value);
-                          resolve(finalValue === value || finalValue.length > 0);
-                        }, 200);
-                      }, 150);
-                    }, 150);
-                  }, 100);
-                }, 100);
-              }, 100);
-              return;
-            }
-            
-            const char = value[index];
-            
-            // Set value up to current character
-            const currentValue = value.substring(0, index + 1);
-            
-            // Create and dispatch keyboard events for this character FIRST
-            const keydownEvent = new KeyboardEvent('keydown', {
-              bubbles: true,
-              cancelable: true,
-              key: char,
-              code: this.getKeyCode(char),
-              charCode: char.charCodeAt(0),
-              keyCode: char.charCodeAt(0)
-            });
-            
-            const keypressEvent = new KeyboardEvent('keypress', {
-              bubbles: true,
-              cancelable: true,
-              key: char,
-              code: this.getKeyCode(char),
-              charCode: char.charCodeAt(0),
-              keyCode: char.charCodeAt(0)
-            });
-            
-            const inputEvent = new InputEvent('input', {
+          // Set the full value at once
+          if (nativeValueSetter) {
+            nativeValueSetter.call(element, value);
+          } else {
+            element.value = value;
+          }
+          
+          // Update React's value tracker if it exists
+          if (element._valueTracker) {
+            element._valueTracker.setValue('');
+            element._valueTracker.setValue(value);
+          }
+          
+          // Update React state
+          this.updateReactState(element, value);
+          
+          // Trigger events quickly
+          setTimeout(() => {
+            element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            element.dispatchEvent(new InputEvent('input', {
               bubbles: true,
               cancelable: true,
               inputType: 'insertText',
-              data: char
-            });
+              data: value
+            }));
             
-            const keyupEvent = new KeyboardEvent('keyup', {
-              bubbles: true,
-              cancelable: true,
-              key: char,
-              code: this.getKeyCode(char),
-              charCode: char.charCodeAt(0),
-              keyCode: char.charCodeAt(0)
-            });
-            
-            element.dispatchEvent(keydownEvent);
-            element.dispatchEvent(keypressEvent);
-            
-            // Set value AFTER keydown/keypress but BEFORE input event
-            if (nativeInputValueSetter) {
-              nativeInputValueSetter.call(element, currentValue);
-            } else {
-              element.value = currentValue;
-            }
-            
-            element.dispatchEvent(inputEvent);
-            element.dispatchEvent(keyupEvent);
-            
-            index++;
-            // Type next character after a small delay
-            setTimeout(typeNextChar, 20);
-          };
-          
-          typeNextChar();
-        }, 50);
+            setTimeout(() => {
+              element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              this.updateReactState(element, value);
+              
+              setTimeout(() => {
+                element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
+                element.blur();
+                
+                // Final verification
+                setTimeout(() => {
+                  this.updateReactState(element, value);
+                  element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                  
+                  const finalValue = element.value || '';
+                  console.log('Typing simulation complete. Value:', finalValue, 'Expected:', value);
+                  resolve(finalValue === value || finalValue.length > 0);
+                }, 50);
+              }, 30);
+            }, 30);
+          }, 30);
+        }, 30);
       } catch (error) {
         console.error('Error in simulateTyping:', error);
         resolve(false);
@@ -2150,6 +2703,10 @@ class WorkdayHandler {
     try {
       console.log(`🔵 Filling SELECT dropdown. Looking for value: "${value}"`);
       console.log(`  Select has ${selectElement.options.length} options`);
+      
+      // Scroll into view and highlight
+      this.scrollIntoViewAndHighlight(selectElement);
+      await new Promise(resolve => setTimeout(resolve, 30));
       
       // Get state mapping for better matching
       const stateMap = {
@@ -2336,6 +2893,10 @@ class WorkdayHandler {
   async fillCustomDropdown(element, value) {
     try {
       console.log(`🔵 Attempting to fill custom dropdown for element:`, element.tagName, element.id || element.className);
+      
+      // Scroll into view and highlight
+      this.scrollIntoViewAndHighlight(element);
+      await new Promise(resolve => setTimeout(resolve, 30));
       
       // Look for a hidden select element nearby
       const parent = element.closest('div, form, fieldset') || document.body;
@@ -3404,14 +3965,17 @@ class WorkdayHandler {
       try {
         element.focus();
         
+        // Determine if this is a textarea or input
+        const isTextarea = element.tagName === 'TEXTAREA';
+        
         // Update value using native setter FIRST
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
+        const nativeValueSetter = Object.getOwnPropertyDescriptor(
+          isTextarea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
           'value'
         )?.set;
         
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(element, value);
+        if (nativeValueSetter) {
+          nativeValueSetter.call(element, value);
         } else {
           element.value = value;
         }
@@ -3633,9 +4197,10 @@ class WorkdayHandler {
         
         console.log(`  Found ${experienceForms.length} total visible experience forms`);
         
-        // Always try to find and click "Add Experience" button if needed
-        // For first entry, click if no forms exist. For subsequent entries, always click.
-        const needsAddButton = (i === 0 && experienceForms.length === 0) || i > 0;
+        // For first entry (i === 0), DON'T click "Add" - use existing form if available
+        // Only click "Add Another" for subsequent entries (i > 0)
+        // This prevents leaving the first form empty
+        const needsAddButton = i > 0;
         
         if (needsAddButton) {
           // Re-find the add button fresh (it might have moved or changed)
@@ -3827,6 +4392,29 @@ class WorkdayHandler {
           console.log(`    ${idx + 1}. ${input.tagName} id="${input.id}" name="${input.name}" type="${input.type}" placeholder="${input.placeholder || ''}"`);
         });
         
+        // VALIDATION: Check if this form actually has job title or company fields
+        // If not, this is likely not an actual experience form (e.g., "previous worker" radio buttons)
+        const hasTitleField = formInputs.some(input => {
+          const id = (input.id || '').toLowerCase();
+          const name = (input.name || '').toLowerCase();
+          return (id.includes('title') || id.includes('jobtitle') || id.includes('position') ||
+                  name.includes('title') || name.includes('jobtitle') || name.includes('position')) &&
+                 input.type !== 'hidden' && input.type !== 'radio' && input.type !== 'checkbox';
+        });
+        
+        const hasCompanyField = formInputs.some(input => {
+          const id = (input.id || '').toLowerCase();
+          const name = (input.name || '').toLowerCase();
+          return (id.includes('company') || id.includes('employer') || id.includes('organization') ||
+                  name.includes('company') || name.includes('employer') || name.includes('organization')) &&
+                 input.type !== 'hidden' && input.type !== 'radio' && input.type !== 'checkbox';
+        });
+        
+        if (!hasTitleField && !hasCompanyField) {
+          console.warn(`  ⚠️ Form does not contain job title or company fields - this is not an actual experience form, SKIPPING`);
+          continue;
+        }
+        
         // Fill experience fields
         const title = exp.title || exp.position || '';
         const company = exp.company || exp.employer || '';
@@ -3858,7 +4446,7 @@ class WorkdayHandler {
             const filled = await this.fillField(titleField, title);
             
             // Wait and verify the value persisted
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 100));
             const verifyValue = titleField.value || '';
             console.log(`  🔍 Title field value after fill: "${verifyValue}"`);
             
@@ -3870,7 +4458,7 @@ class WorkdayHandler {
               // Retry with direct method
               this.setNativeInputValue(titleField, title);
               this.updateReactState(titleField, title);
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise(resolve => setTimeout(resolve, 50));
               const retryValue = titleField.value || '';
               if (retryValue && retryValue.trim().length > 0) {
                 console.log(`  ✅ Retry successful: "${retryValue}"`);
@@ -3912,7 +4500,7 @@ class WorkdayHandler {
             const filled = await this.fillField(companyField, company);
             
             // Wait and verify the value persisted
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 100));
             const verifyValue = companyField.value || '';
             console.log(`  🔍 Company field value after fill: "${verifyValue}"`);
             
@@ -3924,7 +4512,7 @@ class WorkdayHandler {
               // Retry with direct method
               this.setNativeInputValue(companyField, company);
               this.updateReactState(companyField, company);
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise(resolve => setTimeout(resolve, 50));
               const retryValue = companyField.value || '';
               if (retryValue && retryValue.trim().length > 0) {
                 console.log(`  ✅ Retry successful: "${retryValue}"`);
@@ -3968,7 +4556,7 @@ class WorkdayHandler {
           let structuredFilled = false;
           let structuredLog = [];
           
-          // Define fillDatePart as arrow function to access structuredFilled from outer scope
+          // Define fillDatePart - use direct set for date fields to avoid stuttering
           const fillDatePart = async (label, field, value) => {
             if (!field || !value) {
               console.log(`    ⏭️ Skipping ${label} - field or value missing`);
@@ -3976,67 +4564,54 @@ class WorkdayHandler {
             }
             
             console.log(`  📅 Filling ${label} with value: "${value}"`);
-            console.log(`    Field details: ${field.tagName} id="${field.id}" type="${field.type}" name="${field.name}"`);
             
-            // CRITICAL: For date fields, we need to click/focus them first to activate any date pickers
-            console.log(`    🖱️ Clicking/focusing ${label} field first...`);
-            field.focus();
-            field.click();
-            await new Promise(resolve => setTimeout(resolve, 300)); // Wait for any date picker to appear
-            
-            // Use the same fillField method that works for title and company
-            const filled = await this.fillField(field, value);
-            
-            // Wait and verify the value persisted (same as title/company)
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const verifyValue = field.value || '';
-            console.log(`    ✅ ${label} final value after fillField: "${verifyValue}"`);
-            
-            if (filled && verifyValue && verifyValue.trim().length > 0) {
-              structuredFilled = true;
-              structuredLog.push(`${label}=${verifyValue}`);
-              filledCount++;
-              console.log(`    ✅ Successfully filled ${label}`);
-              
-              // Trigger blur to ensure validation runs
-              field.blur();
-              await new Promise(resolve => setTimeout(resolve, 200));
-              
-              return true;
-            } else if (filled) {
-              console.warn(`    ⚠️ Fill reported success but value is empty, retrying with direct method...`);
-              // Retry with direct method (same as title/company)
+            // For date fields, use direct instant fill to avoid stuttering
+            try {
+              // Focus first
               field.focus();
-              this.setNativeInputValue(field, value);
+              
+              // Set value directly using native setter
+              const nativeValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+              )?.set;
+              
+              if (nativeValueSetter) {
+                nativeValueSetter.call(field, value);
+              } else {
+                field.value = value;
+              }
+              
+              // Update React's value tracker
+              if (field._valueTracker) {
+                field._valueTracker.setValue('');
+                field._valueTracker.setValue(value);
+              }
+              
+              // Update React state once
               this.updateReactState(field, value);
               
-              // Trigger all events manually
+              // Trigger single input and change event
               field.dispatchEvent(new Event('input', { bubbles: true }));
               field.dispatchEvent(new Event('change', { bubbles: true }));
               
-              await new Promise(resolve => setTimeout(resolve, 300));
-              const retryValue = field.value || '';
-              console.log(`    🔍 ${label} value after retry: "${retryValue}"`);
+              // Blur immediately
+              field.blur();
               
-              if (retryValue && retryValue.trim().length > 0) {
-                console.log(`    ✅ Retry successful: "${retryValue}"`);
+              const verifyValue = field.value || '';
+              console.log(`    ✅ ${label} filled: "${verifyValue}"`);
+              
+              if (verifyValue && verifyValue.trim().length > 0) {
                 structuredFilled = true;
-                structuredLog.push(`${label}=${retryValue}`);
+                structuredLog.push(`${label}=${verifyValue}`);
                 filledCount++;
-                
-                // Trigger blur to ensure validation runs
-                field.blur();
-                await new Promise(resolve => setTimeout(resolve, 200));
-                
+                this.showFieldFilled(field);
                 return true;
-              } else {
-                console.warn(`    ❌ Failed to fill ${label} after retry`);
-                return false;
               }
-            } else {
-              console.warn(`    ❌ Failed to fill ${label} - fillField returned false`);
-              return false;
+            } catch (e) {
+              console.error(`    Error filling ${label}:`, e);
             }
+            
+            return false;
           };
           
           if (parsedDates) {
@@ -4180,7 +4755,7 @@ class WorkdayHandler {
         }
         
         // Wait between entries
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       console.log(`🔵 ========== FILL WORK EXPERIENCE END ==========`);
@@ -4369,7 +4944,7 @@ class WorkdayHandler {
             const filled = await this.fillField(schoolField, school);
             
             // Wait and verify the value persisted
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 50));
             const verifyValue = schoolField.value || '';
             console.log(`  🔍 School field value after fill: "${verifyValue}"`);
             
@@ -4397,17 +4972,17 @@ class WorkdayHandler {
           }
         }
         
-        // Fill field of study (use extracted value from degree parsing above)
-        const fieldOfStudy = extractedFieldOfStudy || edu.fieldOfStudy || '';
+        // Fill field of study (use extracted value from degree parsing, or from edu.field/edu.major)
+        const fieldOfStudy = extractedFieldOfStudy || edu.fieldOfStudy || edu.field || edu.major || '';
+        console.log(`  📋 Field of study value resolved: "${fieldOfStudy}" (from extractedFieldOfStudy="${extractedFieldOfStudy}", edu.fieldOfStudy="${edu.fieldOfStudy}", edu.field="${edu.field}", edu.major="${edu.major}")`);
+        
         if (fieldOfStudy) {
           console.log(`  🔍 Looking for field of study field with value: "${fieldOfStudy}"`);
           const fieldOfStudyField = this.findFieldInContainer(educationForm, [
             'input[id*="fieldOfStudy" i]',
-            'input[id*="field" i]',
             'input[name*="fieldOfStudy" i]',
-            'input[name*="field" i]',
-            'input[aria-label*="field" i]',
-            'input[data-automation-id*="field" i]',
+            'input[aria-label*="field of study" i]',
+            'input[data-automation-id*="fieldOfStudy" i]',
           ]);
           
           if (fieldOfStudyField) {
@@ -4418,38 +4993,46 @@ class WorkdayHandler {
               currentValue: fieldOfStudyField.value || 'empty'
             });
             
-            // Resolve "Computer Science" to "Computer and Information Science" for Workday dropdown
-            const fieldValue = this.resolveFieldOfStudyValue(fieldOfStudy);
-            console.log(`  📋 Resolved field of study: "${fieldOfStudy}" -> "${fieldValue}"`);
-            
-            // Try custom dropdown first (most reliable for Workday)
-            let fieldFilled = await this.fillCustomDropdown(fieldOfStudyField, fieldValue);
+            // Use Workday autocomplete fill method
+            console.log(`  📋 Filling field of study: "${fieldOfStudy}"`);
+            let fieldFilled = await this.fillWorkdayAutocomplete(fieldOfStudyField, fieldOfStudy);
             
             // Verify the value persisted
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 100));
             const verifyValue = fieldOfStudyField.value || '';
             console.log(`  🔍 Field of study value after fill: "${verifyValue}"`);
             
             if (fieldFilled && verifyValue && verifyValue.trim().length > 0) {
-              console.log(`  ✅ Filled field of study: "${fieldValue}" (verified: "${verifyValue}")`);
+              console.log(`  ✅ Filled field of study: "${fieldOfStudy}" (verified: "${verifyValue}")`);
               filledCount++;
             } else {
-              console.warn(`  ⚠️ Custom dropdown fill failed or value empty, trying fallback...`);
-              // Fallback: try regular fillField
-              fieldFilled = await this.fillField(fieldOfStudyField, fieldOfStudy);
-              await new Promise(resolve => setTimeout(resolve, 300));
+              console.warn(`  ⚠️ Autocomplete failed, trying type-and-select...`);
+              fieldFilled = await this.fillTypeAndSelectDropdown(fieldOfStudyField, fieldOfStudy);
+              await new Promise(resolve => setTimeout(resolve, 100));
               const retryValue = fieldOfStudyField.value || '';
               
               if (fieldFilled && retryValue && retryValue.trim().length > 0) {
-                console.log(`  ✅ Filled field of study via fallback: "${retryValue}"`);
+                console.log(`  ✅ Filled field of study via type-and-select: "${retryValue}"`);
                 filledCount++;
               } else {
-                console.warn(`  ⚠️ All methods failed to fill field of study field`);
+                console.warn(`  ⚠️ Type-and-select also failed, trying direct fill...`);
+                // Last resort: just type the value directly
+                fieldFilled = await this.fillField(fieldOfStudyField, fieldOfStudy);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const finalValue = fieldOfStudyField.value || '';
+                if (finalValue && finalValue.trim().length > 0) {
+                  console.log(`  ✅ Filled field of study via direct fill: "${finalValue}"`);
+                  filledCount++;
+                } else {
+                  console.warn(`  ⚠️ All methods failed to fill field of study field`);
+                }
               }
             }
           } else {
             console.warn(`  ⚠️ Could not find field of study field`);
           }
+        } else {
+          console.log(`  ⏭️ No field of study value to fill`);
         }
         
         // Fill degree
@@ -4504,13 +5087,13 @@ class WorkdayHandler {
               console.log('  Degree field is a BUTTON, clicking to open dropdown...');
               // Don't click yet - let fillCustomDropdown handle it
               // degreeField.click();
-              // await new Promise(resolve => setTimeout(resolve, 500));
+              // await new Promise(resolve => setTimeout(resolve, 100));
               
               // Now try to fill using custom dropdown logic (which will click the button)
               const dropdownFilled = await this.fillCustomDropdown(degreeField, degreeValue);
               
               // Verify the value was set
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await new Promise(resolve => setTimeout(resolve, 50));
               const verifyText = degreeField.textContent || degreeField.innerText || '';
               console.log(`  🔍 Degree button text after fill: "${verifyText}"`);
               
@@ -4521,7 +5104,7 @@ class WorkdayHandler {
                 console.warn(`  ⚠️ Failed to fill degree button dropdown, trying again...`);
                 // Retry once more
                 const retryFilled = await this.fillCustomDropdown(degreeField, degreeValue);
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await new Promise(resolve => setTimeout(resolve, 50));
                 const retryText = degreeField.textContent || degreeField.innerText || '';
                 if (retryFilled && retryText && retryText.trim().length > 0) {
                   console.log(`  ✅ Retry successful: "${retryText}"`);
@@ -4569,22 +5152,58 @@ class WorkdayHandler {
           console.log(`  Date fields found:`, {
             hasStartDate: !!dateFields.startDate,
             hasEndDate: !!dateFields.endDate,
+            hasFirstYear: !!dateFields.firstYearAttended,
+            hasLastYear: !!dateFields.lastYearAttended,
             startDateId: dateFields.startDate?.id,
-            endDateId: dateFields.endDate?.id
+            endDateId: dateFields.endDate?.id,
+            firstYearId: dateFields.firstYearAttended?.id,
+            lastYearId: dateFields.lastYearAttended?.id
           });
           
-          if (dateFields.startDate && dateFields.endDate) {
-            const dateMatch = years.match(/(\d{4})\s*[–-]\s*(\d{4}|Present|Current)/i);
-            if (dateMatch) {
-              const startYear = dateMatch[1];
-              const endYear = dateMatch[2].toLowerCase() === 'present' || dateMatch[2].toLowerCase() === 'current'
-                ? new Date().getFullYear().toString()
-                : dateMatch[2];
-              
-              console.log(`  Parsed education dates: start="${startYear}", end="${endYear}"`);
-              
+          // Parse various date formats
+          let startYear = null;
+          let endYear = null;
+          
+          // Format 1: "2020 - 2024" or "2020 – 2024" or "2020 - Present"
+          const rangeMatch = years.match(/(\d{4})\s*[–-]\s*(\d{4}|Present|Current)/i);
+          if (rangeMatch) {
+            startYear = rangeMatch[1];
+            endYear = rangeMatch[2].toLowerCase() === 'present' || rangeMatch[2].toLowerCase() === 'current'
+              ? new Date().getFullYear().toString()
+              : rangeMatch[2];
+            console.log(`  Parsed range format: start="${startYear}", end="${endYear}"`);
+          }
+          
+          // Format 2: "Expected 2028" or "Graduating 2028" - just use end year
+          if (!startYear && !endYear) {
+            const expectedMatch = years.match(/(?:expected|graduating|graduation)\s*(\d{4})/i);
+            if (expectedMatch) {
+              endYear = expectedMatch[1];
+              // Estimate start year (4 years before for typical bachelor's)
+              startYear = (parseInt(endYear) - 4).toString();
+              console.log(`  Parsed expected format: start="${startYear}" (estimated), end="${endYear}"`);
+            }
+          }
+          
+          // Format 3: Just a year "2028"
+          if (!startYear && !endYear) {
+            const yearOnly = years.match(/(\d{4})/);
+            if (yearOnly) {
+              endYear = yearOnly[1];
+              startYear = (parseInt(endYear) - 4).toString();
+              console.log(`  Parsed single year: start="${startYear}" (estimated), end="${endYear}"`);
+            }
+          }
+          
+          // Try to fill the date fields if we parsed years
+          if (startYear || endYear) {
+            // Workday may use firstYearAttended/lastYearAttended instead of startDate/endDate
+            const startDateEl = dateFields.startDate || dateFields.firstYearAttended;
+            const endDateEl = dateFields.endDate || dateFields.lastYearAttended;
+            
+            if (startDateEl && endDateEl) {
               // Fill start date - handle buttons, divs, selects, and inputs
-              const startDateEl = dateFields.startDate;
+              const startEl = startDateEl;
               console.log(`  🔍 Start date element:`, {
                 tag: startDateEl.tagName,
                 id: startDateEl.id,
@@ -4619,7 +5238,6 @@ class WorkdayHandler {
               }
               
               // Fill end date - handle buttons, divs, selects, and inputs
-              const endDateEl = dateFields.endDate;
               console.log(`  🔍 End date element:`, {
                 tag: endDateEl.tagName,
                 id: endDateEl.id,
@@ -4660,9 +5278,42 @@ class WorkdayHandler {
                 console.warn(`  ⚠️ Failed to fill education dates`);
               }
             } else {
-              console.warn(`  ⚠️ Could not parse date format: "${years}"`);
+              console.warn(`  ⚠️ No start/end date fields found, trying startYear/endYear or generic fields...`);
+              
+              // Try startYear/endYear fields directly (from prefixed lookup)
+              if (dateFields.startYear && startYear) {
+                await this.fillField(dateFields.startYear, startYear);
+                console.log(`  ✅ Filled first year: ${startYear}`);
+              }
+              if (dateFields.endYear && endYear) {
+                await this.fillField(dateFields.endYear, endYear);
+                console.log(`  ✅ Filled last year: ${endYear}`);
+              }
+              
+              // If still no success, try generic year fields
+              if (!dateFields.startYear && !dateFields.endYear) {
+                const yearsField = this.findFieldInContainer(educationForm, [
+                  'select[id*="year" i]',
+                  'select[name*="year" i]',
+                  'input[id*="year" i]',
+                  'input[name*="year" i]',
+                ]);
+                
+                if (yearsField && endYear) {
+                  if (yearsField.tagName === 'SELECT') {
+                    await this.fillSelectDropdown(yearsField, endYear);
+                  } else {
+                    await this.fillField(yearsField, endYear);
+                  }
+                  console.log(`  ✅ Filled year field: ${endYear}`);
+                  filledCount++;
+                }
+              }
             }
           } else {
+            console.warn(`  ⚠️ Could not parse year format: "${years}"`);
+            
+            // Last fallback: try to find any year field and fill with raw value
             const yearsField = this.findFieldInContainer(educationForm, [
               'select[id*="year" i]',
               'select[name*="year" i]',
@@ -4678,15 +5329,15 @@ class WorkdayHandler {
               } else {
                 await this.fillField(yearsField, years);
               }
-              console.log(`  ✅ Filled years: "${years}"`);
+              console.log(`  ✅ Filled years field with raw value: "${years}"`);
               filledCount++;
             } else {
-              console.warn(`  ⚠️ Could not find year/duration fields`);
+              console.warn(`  ⚠️ Could not find any year/duration fields`);
             }
           }
         }
         
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       console.log(`🔵 ========== FILL EDUCATION END ==========`);
@@ -4769,7 +5420,9 @@ class WorkdayHandler {
       startMonth: null,
       startYear: null,
       endMonth: null,
-      endYear: null
+      endYear: null,
+      firstYearAttended: null,
+      lastYearAttended: null
     };
     
     if (!container) {
@@ -4896,9 +5549,24 @@ class WorkdayHandler {
       'lastYearAttended-dateSectionYear-input'
     ]) || pickVisible(container.querySelectorAll('input[id*="end"][id*="year" i], input[id*="to"][id*="year" i], input[id*="last"][id*="year" i]'));
     
+    // Also look for education-specific year fields
+    result.firstYearAttended = prefixedLookup([
+      'firstYearAttended-dateSectionYear-input',
+      'firstYearAttended-input',
+      'firstYearAttended'
+    ]) || pickVisible(container.querySelectorAll('input[id*="firstYearAttended" i][id*="input" i], input[id*="firstYear" i][id*="input" i]'));
+    
+    result.lastYearAttended = prefixedLookup([
+      'lastYearAttended-dateSectionYear-input',
+      'lastYearAttended-input',
+      'lastYearAttended'
+    ]) || pickVisible(container.querySelectorAll('input[id*="lastYearAttended" i][id*="input" i], input[id*="lastYear" i][id*="input" i]'));
+    
     console.log('    Date fields result:', {
       hasStartDate: !!result.startDate,
       hasEndDate: !!result.endDate,
+      hasFirstYearAttended: !!result.firstYearAttended,
+      hasLastYearAttended: !!result.lastYearAttended,
       startDateTag: result.startDate?.tagName,
       endDateTag: result.endDate?.tagName,
       startDateId: result.startDate?.id,
@@ -4906,7 +5574,9 @@ class WorkdayHandler {
       startMonthId: result.startMonth?.id,
       startYearId: result.startYear?.id,
       endMonthId: result.endMonth?.id,
-      endYearId: result.endYear?.id
+      endYearId: result.endYear?.id,
+      firstYearAttendedId: result.firstYearAttended?.id,
+      lastYearAttendedId: result.lastYearAttended?.id
     });
     
     return result;
@@ -5014,7 +5684,7 @@ class WorkdayHandler {
               if (triggerButton) {
                 console.log(`      Found trigger button, clicking it...`);
                 triggerButton.click();
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 100));
               } else {
                 // Try to make the input temporarily accessible
                 const originalDisplay = fileInput.style.display;

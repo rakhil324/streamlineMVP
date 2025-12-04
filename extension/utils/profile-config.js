@@ -121,9 +121,10 @@ function transformDatabaseProfile(dbProfile) {
     linkedIn: dbProfile.linkedIn || '',
     portfolio: dbProfile.portfolio || '',
     
-    // Resume (will be loaded separately if available)
-    resume: null,
-    resumeText: null,
+    // Resume data from database
+    resume: dbProfile.resume || dbProfile.resumeUrl || dbProfile.resumeFile || null,
+    resumeText: dbProfile.resumeText || dbProfile.parsedResume || null,
+    resumeFileName: dbProfile.resumeFileName || dbProfile.resume?.fileName || null,
     
     // Meta
     authenticated: true,
