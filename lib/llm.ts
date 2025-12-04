@@ -300,7 +300,7 @@ export function generateCoverLetterPrompt(
   companyName: string,
   coverLetterTemplate?: string
 ): string {
-  const basePrompt = `Please write a tailored cover letter for the position of "${jobTitle}" at "${companyName}".
+  const basePrompt = `Write a tailored cover letter for the position of "${jobTitle}" at "${companyName}".
 
 Job Description:
 ${jobDescription}
@@ -308,15 +308,20 @@ ${jobDescription}
 Candidate's Resume (for context):
 ${originalResume}
 
-${coverLetterTemplate ? `Cover Letter Template/Previous Version:\n${coverLetterTemplate}\n\n` : ''}Please:
-1. Address the hiring manager professionally
-2. Highlight 2-3 key qualifications that match the job requirements
-3. Show enthusiasm for the specific role and company
-4. Keep it concise (3-4 paragraphs, under 400 words)
-5. Use a professional but engaging tone
-6. Include a strong closing statement
+${coverLetterTemplate ? `IMPORTANT - Use this cover letter as a template. Preserve its EXACT formatting, spacing, and structure:\n${coverLetterTemplate}\n\n` : ''}STRICT REQUIREMENTS:
+1. DO NOT include any introductory text like "Here is a tailored cover letter" or "Here is your cover letter" or similar commentary
+2. Start DIRECTLY with the candidate's name/header - no preamble
+3. Address the hiring manager professionally
+4. Highlight 2-3 key qualifications that match the job requirements
+5. Show enthusiasm for the specific role and company
+6. Keep it concise (3-4 paragraphs, under 400 words)
+7. Use a professional but engaging tone
+8. Include a strong closing statement
+9. NO markdown formatting (no asterisks, no bold, no headers with #)
+10. Use blank lines between paragraphs for proper spacing
+${coverLetterTemplate ? '11. PRESERVE the exact same format, layout, and paragraph spacing as the template provided' : ''}
 
-Return the cover letter in plain text format (NO markdown, NO asterisks, NO bold formatting) with proper paragraph breaks. Do not use any markdown syntax like ** or *.`;
+OUTPUT FORMAT: Return ONLY the cover letter content itself. Begin with the name/header, end with the signature. No introductory sentences, no closing commentary.`;
 
   return basePrompt;
 }

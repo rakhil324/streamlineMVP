@@ -56,36 +56,104 @@ export async function generatePDF(text: string, filename: string): Promise<Buffe
           reject(err);
         });
         
-        // Split text into lines and process
-        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        // Preserve exact line structure from original document
+        // Split by newlines to preserve line-by-line formatting
+        const lines = text.split(/\r\n|\r|\n/);
         console.log(`Processing ${lines.length} lines for PDF`);
-        
+
         doc.font('Helvetica');
+        doc.fontSize(10);
+
+        // Track if we're in the header section (first few lines)
+        let headerLinesProcessed = 0;
+        const maxHeaderLines = 5;
         
+        // Track consecutive blank lines to preserve spacing
+        let consecutiveBlanks = 0;
+
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
-          
-          try {
-            // Skip intro text
-            if (line.toLowerCase().includes("here's") || 
-                line.toLowerCase().includes("tailored resume") ||
-                line.toLowerCase().includes("for a ")) {
-              continue;
+          const trimmedLine = line.trim();
+
+          // Skip intro text that LLM might have added
+          if (trimmedLine.toLowerCase().startsWith("here's") ||
+              trimmedLine.toLowerCase().startsWith("here is") ||
+              trimmedLine.toLowerCase().includes("tailored cover letter for")) {
+            continue;
+          }
+
+          // Handle blank lines - preserve spacing
+          if (!trimmedLine) {
+            consecutiveBlanks++;
+            // Only add spacing if we haven't already added too much
+            if (consecutiveBlanks === 1) {
+              // Single blank line - add small spacing
+              if (headerLinesProcessed < maxHeaderLines) {
+                doc.moveDown(0.2); // Small spacing in header
+              } else {
+                doc.moveDown(0.5); // Normal paragraph spacing
+              }
             }
-            
-            // Simple formatting: just output the text
-            doc.fontSize(10).font('Helvetica').text(line, {
-              align: 'left',
-              width: 512,
-              lineGap: 1.2
-            });
-            doc.moveDown(0.15);
+            // Skip additional consecutive blank lines to avoid excessive spacing
+            continue;
+          }
+
+          // Reset blank line counter when we hit a non-blank line
+          consecutiveBlanks = 0;
+
+          try {
+            // Determine if this is a header line (name, contact info, date)
+            const isHeaderLine = headerLinesProcessed < maxHeaderLines && 
+                                 trimmedLine.length < 60 && 
+                                 (trimmedLine.includes('@') || // Email
+                                  trimmedLine.match(/^\d{3}[-.\s]?\d{3}[-.\s]?\d{4}$/) || // Phone
+                                  trimmedLine.match(/^\w+\s+\d{1,2},\s+\d{4}$/) || // Date
+                                  trimmedLine.length < 40); // Short line likely header
+
+            if (isHeaderLine) {
+              headerLinesProcessed++;
+              // Header lines: smaller spacing, left-aligned
+              doc.fontSize(10).font('Helvetica').text(trimmedLine, {
+                align: 'left',
+                width: 512
+              });
+              doc.moveDown(0.2);
+            } else {
+              // Body text: normal paragraph formatting
+              headerLinesProcessed = maxHeaderLines; // Mark header as done
+              
+              // Check if this looks like a salutation or closing
+              const isShortLine = trimmedLine.length < 50 && 
+                                  (trimmedLine.startsWith('Dear') || 
+                                   trimmedLine.startsWith('Sincerely') ||
+                                   trimmedLine.startsWith('Best regards') ||
+                                   trimmedLine.match(/^[A-Z][a-z]+\s+[A-Z][a-z]+$/)); // Name pattern
+              
+              if (isShortLine) {
+                doc.fontSize(10).font('Helvetica').text(trimmedLine, {
+                  align: 'left',
+                  width: 512
+                });
+                doc.moveDown(0.5);
+              } else {
+                // Regular paragraph line - wrap text properly
+                doc.fontSize(10).font('Helvetica').text(trimmedLine, {
+                  align: 'left',
+                  width: 512,
+                  lineGap: 1.2
+                });
+                // Don't add spacing here - let blank lines handle it
+              }
+            }
           } catch (lineError: any) {
             console.error(`Error processing line ${i}:`, lineError?.message);
-            // Fallback
+            // Fallback - just output the line
             try {
-              doc.fontSize(10).font('Helvetica').text(line, { align: 'left', width: 512 });
-              doc.moveDown(0.15);
+              doc.fontSize(10).font('Helvetica').text(trimmedLine, { 
+                align: 'left', 
+                width: 512 
+              });
+              doc.moveDown(0.3);
             } catch (fallbackError) {
               console.error('Fallback also failed');
             }
