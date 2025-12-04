@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut, Puzzle } from 'lucide-react';
+import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -19,7 +19,7 @@ const navItems: NavItem[] = [
   { name: 'Tracker', icon: <CheckSquare className="w-5 h-5" />, path: '/tracker' },
   { name: 'Saved Jobs', icon: <Bookmark className="w-5 h-5" />, path: '/saved' },
   { name: 'AI Tools', icon: <Sparkles className="w-5 h-5" />, path: '/ai-tools' },
-  { name: 'Extension', icon: <Puzzle className="w-5 h-5" />, path: '/extension' },
+  { name: 'Profile', icon: <User className="w-5 h-5" />, path: '/profile' },
   { name: 'Settings', icon: <Settings className="w-5 h-5" />, path: '/settings' },
 ];
 
@@ -62,7 +62,8 @@ export default function Sidebar() {
               <Link
                 key={item.path}
                 href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                prefetch={true}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-100 ${
                   isActive
                     ? 'bg-primary bg-opacity-10 text-primary font-medium border-l-4 border-primary'
                     : 'text-textSecondary hover:bg-gray-50 hover:text-textPrimary'

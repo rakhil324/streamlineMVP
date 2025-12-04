@@ -70,6 +70,15 @@ function transformDatabaseProfile(dbProfile) {
     current: exp.current || false,
   }));
   
+  // Preserve full address structure for autofill
+  const fullAddress = dbProfile.address || {
+    street: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: 'United States',
+  };
+  
   return {
     id: dbProfile.id || '1',
     firstName: dbProfile.firstName || '',
@@ -78,7 +87,13 @@ function transformDatabaseProfile(dbProfile) {
     email: dbProfile.email || '',
     phone: dbProfile.phone || '',
     location: location,
-    address: dbProfile.address || {},
+    address: fullAddress,
+    // Individual address fields for easy autofill access
+    street: fullAddress.street || '',
+    city: fullAddress.city || '',
+    state: fullAddress.state || '',
+    zip: fullAddress.zip || '',
+    country: fullAddress.country || 'United States',
     
     // Work Authorization
     workAuthorization: dbProfile.workAuthorization || {

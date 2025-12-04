@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, User, LogOut, LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, Puzzle } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -13,7 +13,7 @@ const navItems = [
   { name: 'Tracker', path: '/tracker', icon: CheckSquare },
   { name: 'Saved Jobs', path: '/saved', icon: Bookmark },
   { name: 'AI Tools', path: '/ai-tools', icon: Sparkles },
-  { name: 'Extension', path: '/extension', icon: Puzzle },
+  { name: 'Profile', path: '/profile', icon: User },
   { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
@@ -56,6 +56,7 @@ export default function MobileHeader() {
                 <Link
                   key={item.path}
                   href={item.path}
+                  prefetch={true}
                   onClick={() => setIsOpen(false)}
                   className={`px-6 py-4 border-b border-gray-100 flex items-center gap-3 ${
                     isActive
@@ -97,4 +98,3 @@ export default function MobileHeader() {
     </>
   );
 }
-

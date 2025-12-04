@@ -794,8 +794,8 @@ async function loadProfileData() {
 }
 
 /**
- * Sync profile from backend (uses profile-config.js)
- * Currently uses hardcoded profile, easily switchable to database
+ * Sync profile from backend (fetches fresh data from database API)
+ * Always fetches fresh data to ensure latest changes are reflected
  */
 async function syncProfile() {
   try {
@@ -814,7 +814,8 @@ async function syncProfile() {
       }
     }
 
-    // Get profile from config (hardcoded or database based on PROFILE_CONFIG.source)
+    // Always fetch fresh profile from database API (bypass any cache)
+    console.log('Fetching fresh profile from database API...');
     const profile = await getProfileFromConfig();
 
     if (!profile) {
@@ -949,17 +950,6 @@ function displayProfileData(profile) {
     </div>
   `;
   
-  // Location
-  if (profile.location) {
-    const locationEscaped = profile.location.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    fieldsHTML += `
-      <div class="profile-field copyable-field" data-copy-value="${locationEscaped}">
-        <p class="profile-field-label">Location</p>
-        <p class="profile-field-value">${profile.location}</p>
-      </div>
-    `;
-  }
-  
   // Email
   if (profile.email) {
     const emailEscaped = profile.email.replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -982,12 +972,52 @@ function displayProfileData(profile) {
     `;
   }
   
+  // Full Address - display all parts
+  if (profile.address && (profile.address.street || profile.address.city || profile.address.state)) {
+    const addressParts = [];
+    if (profile.address.street) addressParts.push(profile.address.street);
+    if (profile.address.city) addressParts.push(profile.address.city);
+    if (profile.address.state) addressParts.push(profile.address.state);
+    if (profile.address.zip) addressParts.push(profile.address.zip);
+    if (profile.address.country && profile.address.country !== 'United States') {
+      addressParts.push(profile.address.country);
+    }
+    const fullAddress = addressParts.join(', ');
+    const addressEscaped = fullAddress.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    
+    fieldsHTML += `
+      <div class="profile-field copyable-field" data-copy-value="${addressEscaped}">
+        <p class="profile-field-label">Address</p>
+        <p class="profile-field-value">${fullAddress}</p>
+      </div>
+    `;
+  } else if (profile.location) {
+    // Fallback to simple location if no structured address
+    const locationEscaped = profile.location.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    fieldsHTML += `
+      <div class="profile-field copyable-field" data-copy-value="${locationEscaped}">
+        <p class="profile-field-label">Location</p>
+        <p class="profile-field-value">${profile.location}</p>
+      </div>
+    `;
+  }
+  
   // LinkedIn
   if (profile.linkedIn) {
     fieldsHTML += `
       <div class="profile-field copyable-field" data-copy-value="${profile.linkedIn}">
         <p class="profile-field-label">LinkedIn</p>
         <p class="profile-field-value" style="color: #0077b5;">${profile.linkedIn}</p>
+      </div>
+    `;
+  }
+  
+  // Portfolio
+  if (profile.portfolio) {
+    fieldsHTML += `
+      <div class="profile-field copyable-field" data-copy-value="${profile.portfolio}">
+        <p class="profile-field-label">Portfolio</p>
+        <p class="profile-field-value" style="color: #0077b5;">${profile.portfolio}</p>
       </div>
     `;
   }
@@ -1375,15 +1405,18 @@ async function handleAutofillApplication() {
       console.log('Autofill response:', response);
       
       if (response && response.success) {
+        const filledCount = response.filledCount || response.response?.filledCount || 0;
+        const timedOut = response.response?.timedOut || false;
+        
         button.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
-          <span>Form Filled!</span>
+          <span>Autofill Complete!</span>
         `;
         button.style.background = '#10b981';
         
-        // Show success message
+        // Show success message with filled count
         const toast = document.createElement('div');
         toast.style.cssText = `
           position: fixed;
@@ -1397,9 +1430,14 @@ async function handleAutofillApplication() {
           font-size: 14px;
           z-index: 1000;
         `;
-        toast.textContent = 'Application form filled successfully!';
+        const message = filledCount > 0 
+          ? `Autofill complete! Filled ${filledCount} field${filledCount > 1 ? 's' : ''}.`
+          : timedOut 
+            ? 'Autofill complete! Please verify all fields were filled.'
+            : 'Autofill complete!';
+        toast.textContent = message;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(() => toast.remove(), 4000);
       } else {
         const errorMsg = response?.error || 'Failed to autofill';
         console.error('Autofill failed:', errorMsg);

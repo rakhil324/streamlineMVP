@@ -131,9 +131,9 @@ export default function OnboardingPage() {
         throw new Error('Failed to save profile');
       }
 
-      // Redirect to settings if in edit mode, otherwise dashboard
+      // Redirect to profile if in edit mode, otherwise dashboard
       if (isEditMode) {
-        router.push('/settings');
+        router.push('/profile');
       } else {
         router.push('/');
       }

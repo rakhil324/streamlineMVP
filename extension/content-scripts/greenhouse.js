@@ -19,9 +19,22 @@ const FIELD_MAPPINGS = {
   'phone number': 'phone',
   'telephone': 'phone',
   'mobile': 'phone',
+  
+  // Address fields
   'location': 'location',
-  'address': 'location',
-  'city': 'location',
+  'city': 'city',
+  'state': 'state',
+  'province': 'state',
+  'zip': 'zip',
+  'zip code': 'zip',
+  'postal code': 'zip',
+  'postal': 'zip',
+  'address': 'street',
+  'street': 'street',
+  'street address': 'street',
+  'address line 1': 'street',
+  'address line1': 'street',
+  'addressline1': 'street',
   
   // Education fields
   'school': 'education.school',

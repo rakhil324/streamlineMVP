@@ -457,12 +457,29 @@ async function handleAutofillRequest(tabId, data) {
       console.warn('Could not inject trigger script, trying direct storage access:', injectError);
     }
     
-    // Wait a bit for autofill to complete
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for autofill to complete - poll for result with optimized timeout
+    let autofillResult = null;
+    const maxWaitTime = 8000; // 8 seconds max wait (reduced for speed)
+    const checkInterval = 200; // Check every 200ms (faster polling)
+    let waited = 0;
     
-    // Check if autofill completed by checking storage
-    const result = await chrome.storage.local.get([`autofill_result_${autofillKey}`]);
-    const autofillResult = result[`autofill_result_${autofillKey}`] || { success: true, filledCount: 0 };
+    while (waited < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+      waited += checkInterval;
+      
+      const result = await chrome.storage.local.get([`autofill_result_${autofillKey}`]);
+      if (result[`autofill_result_${autofillKey}`]) {
+        autofillResult = result[`autofill_result_${autofillKey}`];
+        console.log(`Autofill completed after ${waited}ms:`, autofillResult);
+        break;
+      }
+    }
+    
+    // If no result after timeout, assume success with unknown count
+    if (!autofillResult) {
+      console.log('Autofill timed out, assuming success');
+      autofillResult = { success: true, filledCount: 0, timedOut: true };
+    }
     
     // Clean up
     await chrome.storage.local.remove([autofillKey, `autofill_active_${validTabId}`, `autofill_result_${autofillKey}`]);
