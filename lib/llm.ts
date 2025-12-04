@@ -66,7 +66,7 @@ async function callOpenAI(prompt: string, config: LLMConfig): Promise<LLMRespons
         },
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 8000, // Increased for large resumes
     }),
   });
 
@@ -102,7 +102,7 @@ async function callAnthropic(prompt: string, config: LLMConfig): Promise<LLMResp
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2000,
+      max_tokens: 8000, // Increased for large resumes
       messages: [
         {
           role: 'user',
@@ -192,7 +192,7 @@ async function callGroq(prompt: string, config: LLMConfig): Promise<LLMResponse>
         },
       ],
       temperature: 0.7,
-      max_tokens: 2000,
+      max_tokens: 8000, // Increased for large resumes
     }),
   });
 
