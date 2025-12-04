@@ -457,10 +457,10 @@ async function handleAutofillRequest(tabId, data) {
       console.warn('Could not inject trigger script, trying direct storage access:', injectError);
     }
     
-    // Wait for autofill to complete - poll for result with optimized timeout
+    // Wait for autofill to complete - poll for result with generous timeout
     let autofillResult = null;
-    const maxWaitTime = 8000; // 8 seconds max wait (reduced for speed)
-    const checkInterval = 200; // Check every 200ms (faster polling)
+    const maxWaitTime = 30000; // 30 seconds max wait for complex forms
+    const checkInterval = 300; // Check every 300ms
     let waited = 0;
     
     while (waited < maxWaitTime) {
@@ -475,10 +475,10 @@ async function handleAutofillRequest(tabId, data) {
       }
     }
     
-    // If no result after timeout, assume success with unknown count
+    // If no result after timeout, indicate it's still running
     if (!autofillResult) {
-      console.log('Autofill timed out, assuming success');
-      autofillResult = { success: true, filledCount: 0, timedOut: true };
+      console.log('Autofill timed out after', maxWaitTime, 'ms');
+      autofillResult = { success: true, filledCount: 0, timedOut: true, message: 'Autofill may still be running. Please verify fields.' };
     }
     
     // Clean up

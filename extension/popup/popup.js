@@ -1408,33 +1408,45 @@ async function handleAutofillApplication() {
         const filledCount = response.filledCount || response.response?.filledCount || 0;
         const timedOut = response.response?.timedOut || false;
         
-        button.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          <span>Autofill Complete!</span>
-        `;
-        button.style.background = '#10b981';
+        if (timedOut) {
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>Filling... Verify Fields</span>
+          `;
+          button.style.background = '#f59e0b'; // Yellow/warning
+        } else {
+          button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>Autofill Complete!</span>
+          `;
+          button.style.background = '#10b981'; // Green/success
+        }
         
         // Show success message with filled count
         const toast = document.createElement('div');
+        const toastBackground = timedOut ? '#f59e0b' : '#10b981'; // Yellow for timeout, green for success
         toast.style.cssText = `
           position: fixed;
           bottom: 20px;
           left: 50%;
           transform: translateX(-50%);
-          background: #10b981;
+          background: ${toastBackground};
           color: white;
           padding: 12px 24px;
           border-radius: 8px;
           font-size: 14px;
           z-index: 1000;
         `;
-        const message = filledCount > 0 
-          ? `Autofill complete! Filled ${filledCount} field${filledCount > 1 ? 's' : ''}.`
-          : timedOut 
-            ? 'Autofill complete! Please verify all fields were filled.'
-            : 'Autofill complete!';
+        const message = timedOut 
+          ? 'Autofill in progress... Please verify all fields were filled correctly.'
+          : filledCount > 0 
+            ? `✓ Autofill complete! Filled ${filledCount} field${filledCount > 1 ? 's' : ''}.`
+            : '✓ Autofill complete!';
         toast.textContent = message;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
