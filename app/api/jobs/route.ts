@@ -8,11 +8,75 @@ export async function OPTIONS(request: NextRequest) {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       'Access-Control-Allow-Credentials': 'true',
     },
   });
+}
+
+// DELETE - Delete a job by ID (pass id as query param: /api/jobs?id=xxx)
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.id) {
+      const errorResponse = NextResponse.json(
+        { error: 'Unauthorized - Please log in' },
+        { status: 401 }
+      );
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+      return errorResponse;
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      const errorResponse = NextResponse.json(
+        { error: 'Job ID is required' },
+        { status: 400 }
+      );
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+      return errorResponse;
+    }
+
+    // Verify the job belongs to this user
+    const application = await prisma.application.findFirst({
+      where: {
+        id: id,
+        userId: session.user.id,
+      },
+    });
+
+    if (!application) {
+      const errorResponse = NextResponse.json(
+        { error: 'Job not found or access denied' },
+        { status: 404 }
+      );
+      errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+      return errorResponse;
+    }
+
+    // Delete the job
+    await prisma.application.delete({
+      where: { id: id },
+    });
+
+    console.log(`Job deleted: ${application.jobTitle} at ${application.company}`);
+    
+    const response = NextResponse.json({ success: true, message: 'Job deleted' });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
+  } catch (error) {
+    console.error('Error deleting job:', error);
+    const errorResponse = NextResponse.json(
+      { error: 'Failed to delete job' },
+      { status: 500 }
+    );
+    errorResponse.headers.set('Access-Control-Allow-Origin', '*');
+    return errorResponse;
+  }
 }
 
 // GET - List all jobs for the current user
@@ -107,8 +171,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingApplication) {
-      console.log('Job already exists, returning existing job');
-      // Parse metadata to get description
+      console.log('Job already exists, checking if update needed...');
+      
+      // Parse existing metadata
       let existingDescription = '';
       if (existingApplication.metadata) {
         try {
@@ -116,6 +181,64 @@ export async function POST(request: NextRequest) {
           existingDescription = metadata.description || '';
         } catch (e) {}
       }
+      
+      // Check if we should update (new data is better/more complete)
+      // Consider new description "better" if it has proper formatting (newlines) or is longer
+      const hasNewlines = description && description.includes('\n');
+      const existingHasNewlines = existingDescription && existingDescription.includes('\n');
+      const newDescriptionBetter = description && (
+        description.length > existingDescription.length || // Longer is better
+        (hasNewlines && !existingHasNewlines) || // Has formatting when old doesn't
+        (!existingDescription) // No existing description
+      );
+      const newLocationBetter = location && !existingApplication.location;
+      const newJobUrlBetter = jobUrl && !existingApplication.jobUrl;
+      
+      if (newDescriptionBetter || newLocationBetter || newJobUrlBetter) {
+        console.log('Updating existing job with better data...');
+        
+        // Build update data
+        const updateData: any = {};
+        if (newLocationBetter) updateData.location = location;
+        if (newJobUrlBetter) updateData.jobUrl = jobUrl;
+        if (newDescriptionBetter) {
+          updateData.metadata = JSON.stringify({ description: description.substring(0, 8000) });
+        }
+        
+        // Update the existing application
+        const updatedApplication = await prisma.application.update({
+          where: { id: existingApplication.id },
+          data: updateData,
+        });
+        
+        // Parse updated metadata
+        let updatedDescription = '';
+        if (updatedApplication.metadata) {
+          try {
+            const metadata = JSON.parse(updatedApplication.metadata);
+            updatedDescription = metadata.description || '';
+          } catch (e) {}
+        }
+        
+        const response = NextResponse.json({ 
+          job: {
+            id: updatedApplication.id,
+            title: updatedApplication.jobTitle,
+            company: updatedApplication.company,
+            location: updatedApplication.location || '',
+            status: updatedApplication.status,
+            appliedDate: updatedApplication.appliedDate.toISOString().split('T')[0],
+            description: updatedDescription,
+            jobUrl: updatedApplication.jobUrl || '',
+          },
+          message: 'Job updated with better data',
+          success: true
+        });
+        response.headers.set('Access-Control-Allow-Origin', '*');
+        return response;
+      }
+      
+      // No update needed, return existing
       const response = NextResponse.json({ 
         job: {
           id: existingApplication.id,
@@ -134,7 +257,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new application in database with description in metadata
-    const metadata = description ? JSON.stringify({ description: description.substring(0, 2000) }) : null;
+    const metadata = description ? JSON.stringify({ description: description.substring(0, 8000) }) : null;
     
     const application = await prisma.application.create({
       data: {

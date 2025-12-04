@@ -2246,7 +2246,253 @@ document.addEventListener('simplifyAutofill', async (event) => {
 
 function init() {
   console.log('Streamline: Greenhouse content script loaded and ready');
-  // On-page button removed - autofill is now triggered only from the extension popup
+  
+  // Check if we're on a job posting page and auto-save the job info
+  checkAndSaveJobPosting();
+}
+
+/**
+ * Check if we're on a job posting page and save the job info
+ * This captures the job description before the user clicks apply
+ */
+async function checkAndSaveJobPosting() {
+  const currentUrl = window.location.href;
+  console.log('Greenhouse: checkAndSaveJobPosting called, URL:', currentUrl);
+  
+  // Greenhouse job posting URLs typically contain /jobs/ 
+  // Application forms have form elements or specific URL patterns
+  if (!currentUrl.includes('/jobs/') && !currentUrl.includes('job_app')) {
+    console.log('Greenhouse: Not a job page, skipping auto-save');
+    return;
+  }
+  
+  // Wait a bit for page content to load
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  console.log('Greenhouse: Detected job page, extracting job info...');
+  
+  // Extract job info
+  const jobInfo = extractJobInfoForPosting();
+  console.log('Greenhouse: Extracted job info:', jobInfo);
+  
+  // Only save if we got meaningful data
+  if (jobInfo.jobTitle && jobInfo.companyName) {
+    console.log('Greenhouse: Saving job info from posting page');
+    await saveJobToTracker(jobInfo);
+  } else {
+    console.log('Greenhouse: Could not extract sufficient job info from posting page');
+  }
+}
+
+/**
+ * Extract job info specifically for job posting pages (with better description extraction)
+ */
+function extractJobInfoForPosting() {
+  let jobTitle = '';
+  let companyName = '';
+  let jobDescription = '';
+  let location = '';
+  
+  // Extract job title from page
+  const titleSelectors = [
+    'h1',
+    '[data-testid="job-title"]',
+    '.job-title',
+    '.posting-headline h1',
+    '.app-title'
+  ];
+  
+  for (const selector of titleSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent) {
+      const text = element.textContent.trim();
+      if (text.length > 3 && text.length < 150 && !text.includes('Menu') && !text.includes('Sign')) {
+        jobTitle = text;
+        console.log('Greenhouse: Found job title:', jobTitle);
+        break;
+      }
+    }
+  }
+  
+  // Fallback: extract from page title
+  if (!jobTitle) {
+    const pageTitle = document.title || '';
+    if (pageTitle && !pageTitle.toLowerCase().includes('greenhouse')) {
+      // Try to extract job title from page title (e.g., "Software Engineer at Company")
+      const atMatch = pageTitle.match(/^(.+?)\s+at\s+/i);
+      if (atMatch) {
+        jobTitle = atMatch[1].trim();
+      } else {
+        jobTitle = pageTitle.split('|')[0].split('-')[0].trim();
+      }
+      console.log('Greenhouse: Extracted title from page title:', jobTitle);
+    }
+  }
+  
+  // Extract company name
+  const companySelectors = [
+    '[data-testid="company-name"]',
+    '.company-name',
+    '.posting-headline h3',
+    'a[href*="/company/"]',
+  ];
+  
+  for (const selector of companySelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent) {
+      const text = element.textContent.trim();
+      if (text.length > 1 && text.length < 100 && text !== jobTitle) {
+        companyName = text;
+        console.log('Greenhouse: Found company name:', companyName);
+        break;
+      }
+    }
+  }
+  
+  // Fallback: extract company from URL or page title
+  if (!companyName) {
+    // Try URL: boards.greenhouse.io/companyname/jobs/...
+    const urlMatch = window.location.href.match(/greenhouse\.io\/([^\/]+)/);
+    if (urlMatch) {
+      companyName = urlMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      console.log('Greenhouse: Extracted company from URL:', companyName);
+    }
+  }
+  
+  // Extract location
+  const locationSelectors = [
+    '[data-testid="job-location"]',
+    '.location',
+    '.job-location',
+    '[class*="location"]'
+  ];
+  
+  for (const selector of locationSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent) {
+      const text = element.textContent.trim();
+      if (text.length > 2 && text.length < 100) {
+        location = text;
+        console.log('Greenhouse: Found location:', location);
+        break;
+      }
+    }
+  }
+  
+  // Extract job description - stop before the application form
+  // First, try to find a dedicated job description container
+  const descriptionSelectors = [
+    '[data-testid="job-description"]',
+    '.job-description',
+    '.posting-description',
+    '#job-description',
+    '#content > div:first-child', // Often the description is in the first div
+  ];
+  
+  for (const selector of descriptionSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent && element.textContent.length > 200) {
+      // Check this element doesn't contain form inputs
+      if (!element.querySelector('input, select, textarea')) {
+        jobDescription = (element.innerText || element.textContent || '').trim();
+        console.log('Greenhouse: Found description in dedicated container:', selector);
+        break;
+      }
+    }
+  }
+  
+  // If no dedicated container, extract text but stop at form elements
+  if (!jobDescription || jobDescription.length < 200) {
+    const mainContent = document.querySelector('#content') || document.querySelector('main') || document.querySelector('[role="main"]');
+    if (mainContent) {
+      const textParts = [];
+      const seenText = new Set();
+      
+      // Form-related text patterns to stop at
+      const formPatterns = [
+        'first name', 'last name', 'email address', 'phone number',
+        'resume', 'cover letter', 'upload', 'attach', 'submit application',
+        'apply for this job', 'linkedin profile', 'how did you hear',
+        'are you legally', 'work authorization', 'require sponsorship',
+        'equal opportunity', 'voluntary self-identification'
+      ];
+      
+      // Get all text-containing elements in document order
+      const textElements = mainContent.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6');
+      let hitForm = false;
+      
+      for (const el of textElements) {
+        // Skip if inside a form element
+        if (el.closest('form') || el.closest('[id*="application"]') || el.closest('[class*="application"]')) {
+          hitForm = true;
+          break;
+        }
+        
+        const text = (el.innerText || el.textContent || '').trim();
+        if (!text || text.length < 10) continue;
+        if (seenText.has(text)) continue;
+        
+        const lowerText = text.toLowerCase();
+        
+        // Check if we've hit form-related content
+        if (formPatterns.some(pattern => lowerText.includes(pattern))) {
+          console.log('Greenhouse: Stopping at form-related text:', text.substring(0, 50));
+          hitForm = true;
+          break;
+        }
+        
+        // Skip obvious navigation/UI text
+        if (lowerText.startsWith('apply') || lowerText.startsWith('sign') || 
+            lowerText.startsWith('menu') || lowerText === 'submit') continue;
+        
+        seenText.add(text);
+        textParts.push(text);
+      }
+      
+      if (textParts.length > 0) {
+        jobDescription = textParts.join('\n\n');
+        console.log('Greenhouse: Extracted', textParts.length, 'text sections before form');
+      }
+    }
+  }
+  
+  // Limit description length
+  jobDescription = jobDescription.substring(0, 8000);
+  console.log('Greenhouse: Final description length:', jobDescription.length);
+  
+  return { jobTitle, companyName, jobDescription, location };
+}
+
+/**
+ * Save job to application tracker
+ */
+async function saveJobToTracker(jobInfo) {
+  try {
+    if (!jobInfo.jobTitle || !jobInfo.companyName) {
+      console.log('Greenhouse: Missing job info, skipping tracker save');
+      return;
+    }
+
+    console.log('Greenhouse: Saving job to application tracker...');
+    const response = await chrome.runtime.sendMessage({
+      type: 'saveJob',
+      jobInfo: {
+        title: jobInfo.jobTitle,
+        company: jobInfo.companyName,
+        location: jobInfo.location || '',
+        description: jobInfo.jobDescription || '',
+        jobUrl: window.location.href
+      }
+    });
+
+    if (response && response.success) {
+      console.log('Greenhouse: Job saved to tracker successfully');
+    } else {
+      console.warn('Greenhouse: Failed to save job to tracker:', response?.error);
+    }
+  } catch (error) {
+    console.warn('Greenhouse: Error saving job to tracker:', error);
+  }
 }
 
 if (document.readyState === 'loading') {

@@ -6,7 +6,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Tag from '@/components/ui/Tag';
-import { ArrowLeft, MapPin, Briefcase, Building2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Briefcase, Building2, CheckCircle, Trash2 } from 'lucide-react';
 import { Job } from '@/lib/mockData';
 
 export default function JobDetailPage() {
@@ -16,6 +16,33 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Delete job handler
+  const handleDelete = async () => {
+    if (!job || !confirm(`Are you sure you want to delete "${job.title}" at ${job.company}?`)) {
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      const response = await fetch(`/api/jobs?id=${job.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        router.push('/tracker');
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to delete job');
+      }
+    } catch (err) {
+      console.error('Error deleting job:', err);
+      alert('Failed to delete job');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Fetch job from API
   useEffect(() => {
@@ -106,10 +133,20 @@ export default function JobDetailPage() {
                   <h1 className="text-3xl font-bold text-textPrimary mb-2">{job.title}</h1>
                   <p className="text-xl text-textSecondary mb-3">{job.company}</p>
                 </div>
-                <Tag 
-                  label={job.status} 
-                  variant="default"
-                />
+                <div className="flex items-center gap-3">
+                  <Tag 
+                    label={job.status} 
+                    variant="default"
+                  />
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                    title="Delete job"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               
               <div className="flex items-center gap-4 mb-4">

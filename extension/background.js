@@ -873,7 +873,7 @@ async function saveJob(jobInfo) {
         title,
         company,
         location: location || '',
-        description: description ? description.substring(0, 1000) : '',
+        description: description ? description.substring(0, 5000) : '', // Allow up to 5000 chars
         jobUrl: currentUrl || '',
       }),
     });
