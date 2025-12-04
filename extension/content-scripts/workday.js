@@ -73,6 +73,13 @@ class WorkdayHandler {
             [`autofill_result_${storageKey}`]: fillResult || { success: true, filledCount: 0 }
           });
           console.log('Autofill result stored');
+          
+          // Clear the active flag to prevent fallback from running
+          const tabId = storageKey.split('_')[1];
+          if (tabId) {
+            await chrome.storage.local.remove([`autofill_active_${tabId}`]);
+            console.log('Cleared active autofill flag to prevent duplicate runs');
+          }
         } else {
           console.warn('⚠️ No autofill data found in storage for key:', storageKey);
         }
@@ -771,7 +778,7 @@ class WorkdayHandler {
 
   /**
    * Fill Workday's autocomplete/typeahead fields (like Field of Study)
-   * Directly finds and clicks on dropdown options for reliability
+   * Scrolls through dropdown to find exact match
    */
   async fillWorkdayAutocomplete(element, value) {
     if (!element || !value) return false;
@@ -844,87 +851,79 @@ class WorkdayHandler {
       this.updateReactState(element, value);
       element.dispatchEvent(new Event('change', { bubbles: true }));
       
-      // Step 3: Wait for dropdown to appear and populate
-      console.log(`  ⏳ Waiting for dropdown to populate...`);
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Step 3: Wait for dropdown to appear
+      console.log(`  ⏳ Waiting for dropdown...`);
+      await new Promise(resolve => setTimeout(resolve, 600));
       
-      // Step 4: Find all dropdown options
-      console.log(`  🔍 Searching for dropdown options...`);
-      
-      // Try multiple selectors for Workday dropdowns
-      const dropdownSelectors = [
-        '[role="listbox"] [role="option"]',
-        '[data-automation-id="promptOption"]',
-        '[class*="promptOption"]',
-        '[role="option"]',
-        'li[role="option"]',
-        '[class*="menu"] [class*="option"]',
-        '[class*="dropdown"] li',
-        '[class*="autocomplete"] li'
-      ];
-      
-      let allOptions = [];
-      for (const selector of dropdownSelectors) {
-        const options = document.querySelectorAll(selector);
-        if (options.length > 0) {
-          console.log(`    Found ${options.length} options with selector: ${selector}`);
-          allOptions = Array.from(options).filter(opt => {
-            const style = window.getComputedStyle(opt);
-            return style.display !== 'none' && style.visibility !== 'hidden';
-          });
-          if (allOptions.length > 0) break;
-        }
-      }
-      
-      console.log(`  📊 Total visible options found: ${allOptions.length}`);
-      
-      if (allOptions.length === 0) {
-        // No dropdown appeared, just leave the typed value
-        console.log(`  ⚠️ No dropdown options found, keeping typed value`);
+      // Step 4: Find the dropdown listbox
+      const listbox = document.querySelector('[role="listbox"]');
+      if (!listbox) {
+        console.log(`  ⚠️ No dropdown listbox found, keeping typed value`);
         element.blur();
         return value.length > 0;
       }
       
-      // Log first few options for debugging
-      const optionTexts = allOptions.slice(0, 10).map(opt => 
-        (opt.innerText || opt.textContent || '').trim()
-      );
-      console.log(`  📋 First options: ${optionTexts.join(', ')}`);
+      // Step 5: Scroll through dropdown to find exact match
+      console.log(`  🔍 Scrolling through dropdown to find "${value}"...`);
       
-      // Step 5: Find the best matching option
       let exactMatch = null;
       let bestMatch = null;
       let bestMatchScore = -1;
+      const allSeenOptions = new Map(); // text -> element
+      let scrollAttempts = 0;
+      const maxScrollAttempts = 20;
       
-      for (const option of allOptions) {
-        const optionText = (option.innerText || option.textContent || '').trim();
-        const optionTextLower = optionText.toLowerCase();
+      while (scrollAttempts < maxScrollAttempts) {
+        // Get current visible options
+        const currentOptions = listbox.querySelectorAll('[role="option"]');
+        let newOptionsFound = false;
         
-        // Check for exact match (case-insensitive)
-        if (optionTextLower === valueLower) {
-          exactMatch = option;
-          console.log(`  🎯 EXACT MATCH FOUND: "${optionText}"`);
+        for (const option of currentOptions) {
+          const optionText = (option.innerText || option.textContent || '').trim();
+          const optionTextLower = optionText.toLowerCase();
+          
+          if (!allSeenOptions.has(optionTextLower)) {
+            allSeenOptions.set(optionTextLower, option);
+            newOptionsFound = true;
+            
+            // Check for exact match
+            if (optionTextLower === valueLower) {
+              exactMatch = option;
+              console.log(`  🎯 EXACT MATCH FOUND: "${optionText}"`);
+              break;
+            }
+            
+            // Score partial matches
+            let score = 0;
+            if (optionTextLower.startsWith(valueLower)) {
+              score = 1000 - optionText.length;
+            } else if (optionTextLower.includes(valueLower)) {
+              score = 500 - optionText.length;
+            }
+            
+            if (score > bestMatchScore) {
+              bestMatchScore = score;
+              bestMatch = option;
+            }
+          }
+        }
+        
+        // If we found exact match, stop scrolling
+        if (exactMatch) break;
+        
+        // If no new options, we've seen everything
+        if (!newOptionsFound && scrollAttempts > 2) {
+          console.log(`  📊 Reached end of options after ${scrollAttempts} scrolls`);
           break;
         }
         
-        // Score partial matches
-        let score = 0;
-        if (optionTextLower.startsWith(valueLower)) {
-          // Option starts with our value - high score, prefer shorter
-          score = 1000 - optionText.length;
-        } else if (optionTextLower.includes(valueLower)) {
-          // Option contains our value
-          score = 500 - optionText.length;
-        } else if (valueLower.includes(optionTextLower)) {
-          // Our value contains the option
-          score = 300 - optionText.length;
-        }
-        
-        if (score > bestMatchScore) {
-          bestMatchScore = score;
-          bestMatch = option;
-        }
+        // Scroll down to load more options
+        listbox.scrollTop += 200;
+        await new Promise(resolve => setTimeout(resolve, 150));
+        scrollAttempts++;
       }
+      
+      console.log(`  📊 Total unique options found: ${allSeenOptions.size}`);
       
       // Step 6: Click on the best option
       const optionToClick = exactMatch || bestMatch;
@@ -933,21 +932,18 @@ class WorkdayHandler {
         const optionText = (optionToClick.innerText || optionToClick.textContent || '').trim();
         console.log(`  ✅ Clicking on option: "${optionText}"`);
         
-        // Scroll option into view if needed
-        optionToClick.scrollIntoView({ behavior: 'instant', block: 'nearest' });
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Scroll option into view
+        optionToClick.scrollIntoView({ behavior: 'instant', block: 'center' });
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Try multiple click methods
+        // Click the option
         optionToClick.click();
-        
-        // Also dispatch mouse events for React
         optionToClick.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         optionToClick.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         optionToClick.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Verify the value was set
         const finalValue = element.value || '';
         console.log(`  📋 Value after click: "${finalValue}"`);
         
@@ -956,26 +952,67 @@ class WorkdayHandler {
           return true;
         }
       } else {
-        console.log(`  ⚠️ No matching option found in dropdown`);
+        console.log(`  ⚠️ No matching option found in ${allSeenOptions.size} options`);
       }
       
-      // Step 7: Fallback - if click didn't work, try Tab/Enter
-      console.log(`  🔄 Trying keyboard selection fallback...`);
-      element.focus();
+      // Step 7: Fallback - if no exact match, try keyboard navigation
+      console.log(`  🔄 Trying keyboard navigation fallback...`);
       
-      // Press ArrowDown to select first option
+      // Reset - escape current state
       element.dispatchEvent(new KeyboardEvent('keydown', {
         bubbles: true, cancelable: true,
-        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+        key: 'Escape', code: 'Escape', keyCode: 27, which: 27
       }));
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Press Tab to select
+      // Re-focus and trigger dropdown
+      element.focus();
+      element.click();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Navigate with arrow keys looking for exact match
+      const seenTexts = new Set();
+      for (let i = 0; i < 50; i++) {
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+        }));
+        await new Promise(resolve => setTimeout(resolve, 80));
+        
+        // Check if current highlighted option matches
+        const highlighted = document.querySelector('[role="option"][aria-selected="true"]');
+        if (highlighted) {
+          const highlightedText = (highlighted.innerText || highlighted.textContent || '').trim().toLowerCase();
+          
+          if (seenTexts.has(highlightedText)) {
+            console.log(`  ↩️ Looped back, stopping`);
+            break;
+          }
+          seenTexts.add(highlightedText);
+          
+          if (highlightedText === valueLower) {
+            console.log(`  🎯 Found via keyboard: "${highlighted.innerText}"`);
+            element.dispatchEvent(new KeyboardEvent('keydown', {
+              bubbles: true, cancelable: true,
+              key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+            }));
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            const finalValue = element.value || '';
+            if (finalValue.length > 0) {
+              this.showFieldFilled(element);
+              return true;
+            }
+            break;
+          }
+        }
+      }
+      
+      // Final fallback - press Tab to accept typed value
       element.dispatchEvent(new KeyboardEvent('keydown', {
         bubbles: true, cancelable: true,
         key: 'Tab', code: 'Tab', keyCode: 9, which: 9
       }));
-      await new Promise(resolve => setTimeout(resolve, 100));
       
       element.blur();
       element.dispatchEvent(new Event('change', { bubbles: true }));
