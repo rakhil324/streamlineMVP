@@ -615,6 +615,49 @@ function getVeteranDisabilityValue(field) {
   return ['No', 'I do not wish to answer', 'Decline to self-identify', 'Prefer not to say', 'N/A'];
 }
 
+// Check if field is a race/ethnicity question - these should be skipped
+function isRaceEthnicityQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  const racePatterns = [
+    /race/i,
+    /ethnicity/i,
+    /ethnic/i,
+    /hispanic/i,
+    /latino/i,
+    /latina/i,
+    /latinx/i,
+    /african.?american/i,
+    /asian/i,
+    /caucasian/i,
+    /pacific.?islander/i,
+    /native.?american/i,
+    /indigenous/i,
+    /multiracial/i,
+    /biracial/i,
+    /racial/i,
+    /identify.*race/i,
+    /race.*identify/i,
+    /ethnic.*background/i,
+    /racial.*background/i,
+    /please mark all that apply.*race/i,
+    /race.*please mark/i,
+  ];
+  
+  const isMatch = racePatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isRaceEthnicityQuestion matched - SKIPPING', {
+      label: field.label,
+      allText: allText.substring(0, 200)
+    });
+  }
+  
+  return isMatch;
+}
+
 // Check if field is a university/school dropdown
 function isUniversityQuestion(field) {
   const label = field.label?.toLowerCase() || '';
@@ -1687,23 +1730,6 @@ function fillField(element, value) {
   return false;
 }
 
-// Create a File object from base64 data
-function createFileFromBase64(base64Data, fileName, mimeType) {
-  try {
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: mimeType });
-    return new File([blob], fileName, { type: mimeType });
-  } catch (error) {
-    console.error('Error creating file from base64:', error);
-    return null;
-  }
-}
-
 // Fill a file input field with resume file
 async function fillFileField(element, resumeFile) {
   try {
@@ -2085,19 +2111,7 @@ async function autofillForm() {
         console.log('Streamline: Resume field(s) detected, fetching resume data...');
         // Get resume text from profile for tailoring
         resumeData = profile.resumeText || '';
-        
-        // Check if we have a tailored resume selected from the popup
-        if (profile.tailoredResume && profile.tailoredResume.pdfBase64) {
-          console.log('Streamline: Using tailored resume:', profile.tailoredResume.fileName);
-          originalResumeFile = createFileFromBase64(
-            profile.tailoredResume.pdfBase64,
-            profile.tailoredResume.fileName || 'tailored-resume.pdf',
-            'application/pdf'
-          );
-          showNotification(`Using tailored resume: ${profile.tailoredResume.companyName}`, 'info');
-        } else {
-          originalResumeFile = await fetchResumeFile();
-        }
+        originalResumeFile = await fetchResumeFile();
         console.log('Streamline: Resume data fetched from profile');
       } catch (error) {
         console.error('Streamline: Failed to fetch resume data:', error);
@@ -2401,6 +2415,12 @@ async function autofillForm() {
       }
       
       // Check for disability status questions - answer No/Decline
+      // Skip race/ethnicity questions entirely - leave blank for user
+      if (isRaceEthnicityQuestion(field)) {
+        console.log('Streamline: Race/ethnicity question detected - SKIPPING:', field.label);
+        return; // Skip this field entirely
+      }
+      
       if (isDisabilityQuestion(field)) {
         console.log('Streamline: Disability question detected', {
           label: field.label,

@@ -14,6 +14,8 @@ export default function AIToolsPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [showJobSelector, setShowJobSelector] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
+  const [trackerJobs, setTrackerJobs] = useState<Job[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
   const [generationSteps, setGenerationSteps] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -39,7 +41,6 @@ export default function AIToolsPage() {
     content: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [savedResumeNotification, setSavedResumeNotification] = useState<string | null>(null);
 
   interface InterviewQuestion {
     question: string;
@@ -56,11 +57,6 @@ export default function AIToolsPage() {
     tailoredData?: any;
     originalData?: any;
   }>({});
-
-  // Jobs loaded from the tracker (/api/jobs)
-  const [trackerJobs, setTrackerJobs] = useState<Job[]>([]);
-  const [jobsLoading, setJobsLoading] = useState<boolean>(true);
-  const [jobsError, setJobsError] = useState<string | null>(null);
 
   const tools = [
     {
@@ -145,35 +141,30 @@ export default function AIToolsPage() {
   // Track if we've auto-loaded the resume to show a notification
   const [autoLoadedResume, setAutoLoadedResume] = useState(false);
 
-  // Fetch profile documents and tracker jobs on mount
+  // Fetch tracker jobs on mount
+  useEffect(() => {
+    fetchTrackerJobs();
+  }, []);
+
+  // Fetch profile documents on mount and automatically use profile resume if available
   useEffect(() => {
     fetchProfileDocuments();
-    fetchTrackerJobs();
   }, []);
 
   const fetchTrackerJobs = async () => {
     try {
-      setJobsLoading(true);
-      setJobsError(null);
-
+      setLoadingJobs(true);
       const response = await fetch('/api/jobs');
-      if (!response.ok) {
-        if (response.status === 401) {
-          setJobsError('Please log in to view your tracked jobs.');
-        } else {
-          setJobsError('Failed to load jobs from tracker.');
-        }
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        // Get all jobs from tracker (applied jobs)
+        const jobs = (data.jobs || []).filter((job: Job) => job.status === 'Applied');
+        setTrackerJobs(jobs);
       }
-
-      const data = await response.json();
-      const appliedJobs = (data.jobs || []).filter((job: Job) => job.status === 'Applied');
-      setTrackerJobs(appliedJobs);
-    } catch (error) {
-      console.error('Error fetching tracker jobs:', error);
-      setJobsError('Failed to load jobs from tracker.');
+    } catch (err) {
+      console.error('Error fetching tracker jobs:', err);
     } finally {
-      setJobsLoading(false);
+      setLoadingJobs(false);
     }
   };
 
@@ -318,36 +309,6 @@ export default function AIToolsPage() {
     // Resume data should already be set via useProfileResume or file upload
   };
 
-  // Save tailored resume to database
-  const saveTailoredResume = async (jobTitle: string, companyName: string, pdfBase64: string, textContent: string) => {
-    try {
-      const response = await fetch('/api/tailored-resumes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jobTitle,
-          companyName,
-          fileName: `Resume - ${companyName} - ${jobTitle}.pdf`,
-          pdfBase64,
-          textContent,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSavedResumeNotification(`Resume saved for ${companyName}`);
-        setTimeout(() => setSavedResumeNotification(null), 5000);
-        console.log('Tailored resume saved:', data);
-      } else {
-        console.error('Failed to save tailored resume');
-      }
-    } catch (error) {
-      console.error('Error saving tailored resume:', error);
-    }
-  };
-
   const handleGenerate = async (toolId: string, job: Job | null) => {
     setError(null);
     setActiveTool(toolId);
@@ -411,11 +372,6 @@ export default function AIToolsPage() {
           pdfBase64: data.pdf,
           selectedJobId: job.id 
         }));
-
-        // Automatically save the tailored resume
-        if (data.pdf) {
-          await saveTailoredResume(job.title, job.company, data.pdf, data.content);
-        }
       } else if (toolId === 'cover' && job && fileData) {
         const response = await fetch('/api/tailor/cover-letter', {
           method: 'POST',
@@ -556,7 +512,7 @@ export default function AIToolsPage() {
           </p>
         </div>
 
-        {/* Job Selector Modal - uses jobs from tracker */}
+        {/* Job Selector Modal */}
         {showJobSelector && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <Card className="max-w-2xl w-full max-h-[80vh] overflow-y-auto">
@@ -572,37 +528,26 @@ export default function AIToolsPage() {
                 </button>
               </div>
               <div className="space-y-3">
-                {jobsLoading && (
-                  <div className="py-8 text-center text-textSecondary text-sm">
-                    Loading jobs from your tracker...
+                {loadingJobs ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-textSecondary">Loading jobs from tracker...</p>
                   </div>
-                )}
-                {!jobsLoading && jobsError && (
-                  <div className="py-4 text-center text-red-600 text-sm">
-                    {jobsError}
-                  </div>
-                )}
-                {!jobsLoading && !jobsError && trackerJobs.length === 0 && (
-                  <div className="py-8 text-center text-textSecondary text-sm">
-                    No applied jobs found in your tracker yet.
-                    <br />
-                    Use the extension autofill on a job application to add jobs here.
-                  </div>
-                )}
-                {!jobsLoading && !jobsError && trackerJobs.length > 0 && trackerJobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className={`p-4 border rounded-lg transition-all ${
-                      selectedJob?.id === job.id
-                        ? 'border-primary bg-blue-50'
-                        : 'border-gray-200 hover:border-primary hover:bg-blue-50'
-                    }`}
-                  >
-                    <div 
-                      onClick={() => handleJobSelect(job, showJobSelector!)}
-                      className="cursor-pointer"
+                ) : trackerJobs.length > 0 ? (
+                  trackerJobs.map((job) => (
+                    <div
+                      key={job.id}
+                      className={`p-4 border rounded-lg transition-all ${
+                        selectedJob?.id === job.id
+                          ? 'border-primary bg-blue-50'
+                          : 'border-gray-200 hover:border-primary hover:bg-blue-50'
+                      }`}
                     >
-                      <div className="flex items-start gap-3">
+                      <div 
+                        onClick={() => handleJobSelect(job, showJobSelector!)}
+                        className="cursor-pointer"
+                      >
+                        <div className="flex items-start gap-3">
                         <div className="w-12 h-12 bg-primary bg-opacity-10 rounded-lg flex items-center justify-center flex-shrink-0">
                           <Building2 className="w-6 h-6 text-primary" />
                         </div>
@@ -610,31 +555,52 @@ export default function AIToolsPage() {
                           <h4 className="font-semibold text-textPrimary">{job.title}</h4>
                           <p className="text-sm text-textSecondary">{job.company}</p>
                           <p className="text-xs text-textSecondary mt-1">{job.location}</p>
+                          {job.appliedDate && (
+                            <p className="text-xs text-green-600 mt-1">Applied: {job.appliedDate}</p>
+                          )}
+                        </div>
                         </div>
                       </div>
+                      <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/jobs/${job.id}`);
+                          }}
+                          className="text-sm text-primary hover:underline flex items-center gap-1"
+                        >
+                          View Job Details →
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleJobSelect(job, showJobSelector!);
+                          }}
+                          className="text-sm text-white bg-primary px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                        >
+                          Use This Job
+                        </button>
+                      </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          router.push(`/jobs/${job.id}`);
-                        }}
-                        className="text-sm text-primary hover:underline flex items-center gap-1"
-                      >
-                        View Job Details →
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleJobSelect(job, showJobSelector!);
-                        }}
-                        className="text-sm text-white bg-primary px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
-                      >
-                        Use This Job
-                      </button>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-textSecondary mb-2">No jobs in your tracker yet</p>
+                    <p className="text-sm text-textSecondary mb-4">
+                      Use the autofill feature on job application pages to add jobs
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowJobSelector(null);
+                        router.push('/tracker');
+                      }}
+                      className="text-primary hover:underline text-sm"
+                    >
+                      Go to Tracker →
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             </Card>
           </div>
@@ -804,20 +770,6 @@ export default function AIToolsPage() {
             <button
               onClick={() => setError(null)}
               className="ml-auto p-1 hover:bg-red-100 rounded"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Saved Resume Notification */}
-        {savedResumeNotification && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-700">
-            <CheckCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{savedResumeNotification} - Available for autofill in extension</span>
-            <button
-              onClick={() => setSavedResumeNotification(null)}
-              className="ml-auto p-1 hover:bg-green-100 rounded"
             >
               <X className="w-4 h-4" />
             </button>

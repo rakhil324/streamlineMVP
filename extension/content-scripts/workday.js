@@ -2567,22 +2567,9 @@ class WorkdayHandler {
       console.log('🔵 ========== RESUME UPLOAD SECTION ==========');
       console.log('  Resume data:', data.resume);
       console.log('  Resume type:', typeof data.resume);
-      console.log('  Tailored resume:', data.tailoredResume ? 'Available' : 'Not available');
-      
-      // Check if we have a tailored resume selected from the popup
-      let resumeToUpload = data.resume;
-      if (data.tailoredResume && data.tailoredResume.pdfBase64) {
-        console.log('🔵 Using tailored resume:', data.tailoredResume.fileName);
-        resumeToUpload = this.createFileFromBase64(
-          data.tailoredResume.pdfBase64,
-          data.tailoredResume.fileName || 'tailored-resume.pdf',
-          'application/pdf'
-        );
-      }
-      
-      if (resumeToUpload) {
+      if (data.resume) {
         console.log('🔵 Attempting to upload resume...');
-        const resumeUploaded = await this.handleResumeUpload(resumeToUpload);
+        const resumeUploaded = await this.handleResumeUpload(data.resume);
         if (resumeUploaded) {
           filledCount++;
           console.log('✅ Resume uploaded successfully');
@@ -6880,25 +6867,6 @@ class WorkdayHandler {
     });
     
     return result;
-  }
-
-  /**
-   * Create a File object from base64 data
-   */
-  createFileFromBase64(base64Data, fileName, mimeType) {
-    try {
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: mimeType });
-      return new File([blob], fileName, { type: mimeType });
-    } catch (error) {
-      console.error('Error creating file from base64:', error);
-      return null;
-    }
   }
 
   /**

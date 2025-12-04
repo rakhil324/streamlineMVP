@@ -236,28 +236,7 @@ async function handleMappingRequest(data) {
  * Handle autofill request
  */
 async function handleAutofillRequest(tabId, data) {
-  const { tailorRequest, selectedResumeId } = data;
-
-  // If a tailored resume is selected, fetch it
-  let tailoredResumeData = null;
-  if (selectedResumeId) {
-    try {
-      console.log('Fetching tailored resume:', selectedResumeId);
-      const response = await fetch(`http://localhost:3000/api/tailored-resumes/${selectedResumeId}`, {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const resumeData = await response.json();
-        tailoredResumeData = resumeData.resume;
-        console.log('Fetched tailored resume:', tailoredResumeData?.fileName);
-      } else {
-        console.error('Failed to fetch tailored resume:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching tailored resume:', error);
-    }
-  }
+  const { tailorRequest } = data;
 
   // Get profile data - try storage first, then hardcoded profile
   let profileData = await storageManager.getProfileData();
@@ -373,9 +352,6 @@ async function handleAutofillRequest(tabId, data) {
     resume: resumeData,
     resumeText: profileData.resumeText || null,
     coverLetter: profileData.coverLetter || null,
-    
-    // Tailored resume data (if selected)
-    tailoredResume: tailoredResumeData,
   };
   
   console.log('Prepared autofill data:', {
