@@ -615,6 +615,334 @@ function getVeteranDisabilityValue(field) {
   return ['No', 'I do not wish to answer', 'Decline to self-identify', 'Prefer not to say', 'N/A'];
 }
 
+// Check if field is a university/school dropdown
+function isUniversityQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const universityPatterns = [
+    /university/i,
+    /college/i,
+    /school name/i,
+    /institution/i,
+    /alma mater/i,
+    /where did you (go|attend|study)/i,
+    /attended/i,
+    /education.*name/i,
+    /school.*attended/i,
+  ];
+  
+  // Exclude "high school" specifically
+  if (allText.includes('high school') || allText.includes('highschool')) {
+    return false;
+  }
+  
+  const isMatch = universityPatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isUniversityQuestion matched', { label: field.label });
+  }
+  
+  return isMatch;
+}
+
+// Check if field is a degree type dropdown
+function isDegreeQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const degreePatterns = [
+    /degree type/i,
+    /degree level/i,
+    /level of education/i,
+    /education level/i,
+    /highest degree/i,
+    /degree earned/i,
+    /type of degree/i,
+    /what degree/i,
+    /degree.*obtained/i,
+    /qualification/i,
+    /^degree$/i,
+  ];
+  
+  // Make sure it's not asking for "field of study" or "major"
+  if (allText.includes('field of') || allText.includes('major') || allText.includes('concentration')) {
+    return false;
+  }
+  
+  const isMatch = degreePatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isDegreeQuestion matched', { label: field.label });
+  }
+  
+  return isMatch;
+}
+
+// Check if field is a major/field of study dropdown
+function isMajorQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const majorPatterns = [
+    /major/i,
+    /field of study/i,
+    /area of study/i,
+    /concentration/i,
+    /specialization/i,
+    /discipline/i,
+    /subject/i,
+    /course of study/i,
+    /program/i,
+    /what did you study/i,
+  ];
+  
+  const isMatch = majorPatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isMajorQuestion matched', { label: field.label });
+  }
+  
+  return isMatch;
+}
+
+// Get education value from profile
+function getEducationValue(field, profile, type) {
+  // Get the most recent/primary education entry
+  const education = profile?.education?.[0];
+  
+  if (!education) {
+    console.log('Streamline: No education data in profile');
+    return null;
+  }
+  
+  switch (type) {
+    case 'university':
+      const school = education.school || '';
+      console.log('Streamline: Using university from profile:', school);
+      return school;
+      
+    case 'degree':
+      const degree = education.degree || '';
+      console.log('Streamline: Using degree from profile:', degree);
+      // Return variations to try matching different dropdown formats
+      if (degree) {
+        return [
+          degree,
+          degree.replace("'s", ''), // "Bachelor's" -> "Bachelor"
+          degree.replace("Bachelor's", "Bachelor's Degree"),
+          degree.replace("Master's", "Master's Degree"),
+          degree.replace("Bachelor", "BS"),
+          degree.replace("Master", "MS"),
+          "Bachelor's Degree",
+          "Bachelor of Science",
+          "Bachelor of Arts",
+        ];
+      }
+      return null;
+      
+    case 'major':
+      const major = education.field || education.major || '';
+      console.log('Streamline: Using major from profile:', major);
+      return major;
+      
+    default:
+      return null;
+  }
+}
+
+// Check if field is a graduation/education year field
+function isEducationYearQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const yearPatterns = [
+    /graduation.*year/i,
+    /year.*graduat/i,
+    /end.*year/i,
+    /year.*end/i,
+    /completion.*year/i,
+    /year.*complet/i,
+    /expected.*year/i,
+    /year.*expected/i,
+    /education.*year/i,
+    /degree.*year/i,
+    /^year$/i,  // Just "Year" label
+    /\byear\b/i,  // Any field with "year" as a word
+  ];
+  
+  // Check if this is a year field based on patterns or context
+  const isYearInput = field.element.tagName === 'INPUT' || field.element.tagName === 'SELECT';
+  const hasEducationContext = allText.includes('education') || allText.includes('school') || 
+                              allText.includes('university') || allText.includes('degree') ||
+                              allText.includes('graduat') || allText.includes('college');
+  
+  // Check if it's a SELECT with year options (e.g., 2020, 2021, 2022)
+  const isYearSelect = field.element.tagName === 'SELECT' && Array.from(field.element.options || []).some(opt => {
+    const text = (opt.text || '').trim();
+    return /^(19|20)\d{2}$/.test(text); // Matches years like 1990-2099
+  });
+  
+  // Also check if the field has year-related attributes
+  const hasYearAttribute = id.includes('year') || name.includes('year') || 
+                           id.includes('_yr') || name.includes('_yr') ||
+                           id.includes('enddate') || name.includes('enddate');
+  
+  const isMatch = yearPatterns.some(pattern => pattern.test(allText)) ||
+                  (isYearInput && hasEducationContext && allText.includes('year')) ||
+                  isYearSelect ||
+                  hasYearAttribute;
+  
+  if (isMatch) {
+    console.log('Streamline: isEducationYearQuestion matched', { label: field.label, id, name, isYearSelect });
+  }
+  
+  return isMatch;
+}
+
+// Check if field is a start year field for education
+function isEducationStartYearQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const startYearPatterns = [
+    /start.*year/i,
+    /year.*start/i,
+    /from.*year/i,
+    /begin.*year/i,
+    /year.*begin/i,
+    /enrolled.*year/i,
+    /startdate/i,
+    /start_date/i,
+    /from_year/i,
+  ];
+  
+  // Check if it's a start year based on field ID/name
+  const hasStartAttribute = id.includes('start') || name.includes('start') ||
+                            id.includes('from') || name.includes('from') ||
+                            id.includes('begin') || name.includes('begin');
+  
+  const isMatch = startYearPatterns.some(pattern => pattern.test(allText)) ||
+                  (hasStartAttribute && (allText.includes('year') || id.includes('year') || name.includes('year')));
+  
+  if (isMatch) {
+    console.log('Streamline: isEducationStartYearQuestion matched', { label: field.label, id, name });
+  }
+  
+  return isMatch;
+}
+
+// Check if field is a month dropdown (for education dates)
+function isEducationMonthQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const id = field.element.id?.toLowerCase() || '';
+  const name = field.element.name?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = [label, id, name, allIdentifiers].join(' ');
+  
+  const monthPatterns = [
+    /graduation.*month/i,
+    /month.*graduat/i,
+    /end.*month/i,
+    /month.*end/i,
+    /completion.*month/i,
+    /start.*month/i,
+    /month.*start/i,
+    /from.*month/i,
+    /^month$/i,  // Just "Month" label
+    /\bmonth\b/i,  // Any field with "month" as a word
+  ];
+  
+  // Check if it's a select with month options
+  const isSelect = field.element.tagName === 'SELECT';
+  if (isSelect) {
+    const options = Array.from(field.element.options || []);
+    const hasMonthOptions = options.some(opt => {
+      const text = (opt.text || '').toLowerCase();
+      return text.includes('january') || text.includes('february') || text.includes('march') ||
+             text.includes('april') || text.includes('may') || text.includes('june') ||
+             text === 'jan' || text === 'feb' || text === 'mar' || text === 'apr';
+    });
+    if (hasMonthOptions) {
+      console.log('Streamline: isEducationMonthQuestion matched (has month options)', { label: field.label });
+      return true;
+    }
+  }
+  
+  // Check if the field has month-related attributes
+  const hasMonthAttribute = id.includes('month') || name.includes('month') ||
+                            id.includes('_mo') || name.includes('_mo');
+  
+  const isMatch = monthPatterns.some(pattern => pattern.test(allText)) || hasMonthAttribute;
+  
+  if (isMatch) {
+    console.log('Streamline: isEducationMonthQuestion matched', { label: field.label, id, name });
+  }
+  
+  return isMatch;
+}
+
+// Get education date value from profile
+function getEducationDateValue(field, profile, dateType) {
+  const education = profile?.education?.[0];
+  
+  if (!education) {
+    console.log('Streamline: No education data in profile for date');
+    return null;
+  }
+  
+  const label = field.label?.toLowerCase() || '';
+  const allText = (field.identifiers?.join(' ') || '').toLowerCase() + ' ' + label;
+  
+  // Determine if this is a start date or end/graduation date
+  const isStartDate = allText.includes('start') || allText.includes('from') || allText.includes('begin') || allText.includes('enrolled');
+  
+  switch (dateType) {
+    case 'year':
+      if (isStartDate) {
+        console.log('Streamline: Using start year:', education.startYear);
+        return education.startYear || '';
+      } else {
+        console.log('Streamline: Using graduation year:', education.graduationYear);
+        return education.graduationYear || '';
+      }
+      
+    case 'month':
+      if (isStartDate) {
+        // Return both number and name for matching
+        console.log('Streamline: Using start month:', education.startMonthName);
+        return {
+          number: education.startMonth || '',
+          name: education.startMonthName || '',
+        };
+      } else {
+        console.log('Streamline: Using graduation month:', education.graduationMonthName);
+        return {
+          number: education.graduationMonth || '',
+          name: education.graduationMonthName || '',
+        };
+      }
+      
+    default:
+      return null;
+  }
+}
+
 // Fill dropdown field (for React Select or custom dropdowns)
 async function fillDropdownField(inputElement, targetValue, field) {
   console.log('Streamline: fillDropdownField called', {
@@ -1359,6 +1687,23 @@ function fillField(element, value) {
   return false;
 }
 
+// Create a File object from base64 data
+function createFileFromBase64(base64Data, fileName, mimeType) {
+  try {
+    const byteCharacters = atob(base64Data);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    return new File([blob], fileName, { type: mimeType });
+  } catch (error) {
+    console.error('Error creating file from base64:', error);
+    return null;
+  }
+}
+
 // Fill a file input field with resume file
 async function fillFileField(element, resumeFile) {
   try {
@@ -1740,7 +2085,19 @@ async function autofillForm() {
         console.log('Streamline: Resume field(s) detected, fetching resume data...');
         // Get resume text from profile for tailoring
         resumeData = profile.resumeText || '';
-        originalResumeFile = await fetchResumeFile();
+        
+        // Check if we have a tailored resume selected from the popup
+        if (profile.tailoredResume && profile.tailoredResume.pdfBase64) {
+          console.log('Streamline: Using tailored resume:', profile.tailoredResume.fileName);
+          originalResumeFile = createFileFromBase64(
+            profile.tailoredResume.pdfBase64,
+            profile.tailoredResume.fileName || 'tailored-resume.pdf',
+            'application/pdf'
+          );
+          showNotification(`Using tailored resume: ${profile.tailoredResume.companyName}`, 'info');
+        } else {
+          originalResumeFile = await fetchResumeFile();
+        }
         console.log('Streamline: Resume data fetched from profile');
       } catch (error) {
         console.error('Streamline: Failed to fetch resume data:', error);
@@ -1819,10 +2176,18 @@ async function autofillForm() {
       );
       const isCheckbox = field.element.type === 'checkbox';
       
+      // Check if this is an education-related field that needs special handling
+      const isEducationField = isUniversityQuestion(field) || isDegreeQuestion(field) || 
+                               isMajorQuestion(field) || isEducationYearQuestion(field) || 
+                               isEducationStartYearQuestion(field) || isEducationMonthQuestion(field);
+      
       if (isWorkAuthorizationQuestion(field) || isCountryField(field) || isCustomSelect || isNativeSelect) {
         dropdownFields.push(field);
       } else if (isCheckbox) {
         // Handle checkboxes separately
+        dropdownFields.push(field);
+      } else if (isEducationField) {
+        // Education fields (including text inputs for years) need special handling
         dropdownFields.push(field);
       } else {
         regularFields.push(field);
@@ -2094,6 +2459,317 @@ async function autofillForm() {
         // If couldn't fill, fall through to other handlers
       }
       
+      // Check for university/school dropdown - type name and press Enter
+      if (isUniversityQuestion(field)) {
+        console.log('Streamline: University question detected', { 
+          label: field.label, 
+          tagName: field.element.tagName,
+          type: field.element.type,
+          isNativeSelect 
+        });
+        
+        const universityValue = getEducationValue(field, profile, 'university');
+        if (universityValue) {
+          let filled = false;
+          
+          if (isNativeSelect) {
+            // For native selects, try to find a match
+            const options = Array.from(field.element.options);
+            const valueLower = universityValue.toLowerCase();
+            
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === valueLower || optText.includes(valueLower) || valueLower.includes(optText);
+            });
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Filled university dropdown:', targetOption.text);
+            }
+          } else {
+            // For text inputs and custom dropdowns (typeahead), type the name and press Enter
+            try {
+              console.log('Streamline: Typing university name into field:', universityValue);
+              
+              field.element.focus();
+              field.element.click();
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Clear existing value
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(field.element, '');
+              } else {
+                field.element.value = '';
+              }
+              field.element.dispatchEvent(new Event('input', { bubbles: true }));
+              await new Promise(resolve => setTimeout(resolve, 50));
+              
+              // Type the university name character by character for better autocomplete triggering
+              for (let i = 0; i < universityValue.length; i++) {
+                const currentValue = universityValue.substring(0, i + 1);
+                if (nativeInputValueSetter) {
+                  nativeInputValueSetter.call(field.element, currentValue);
+                } else {
+                  field.element.value = currentValue;
+                }
+                field.element.dispatchEvent(new Event('input', { bubbles: true }));
+                field.element.dispatchEvent(new KeyboardEvent('keydown', { key: universityValue[i], bubbles: true }));
+                field.element.dispatchEvent(new KeyboardEvent('keyup', { key: universityValue[i], bubbles: true }));
+                
+                // Small delay between characters
+                if (i < 5) await new Promise(resolve => setTimeout(resolve, 30));
+              }
+              
+              // Wait for dropdown to populate
+              await new Promise(resolve => setTimeout(resolve, 600));
+              
+              // Try to find and click the first option in the dropdown
+              const dropdownOptions = document.querySelectorAll('[role="option"], [role="listbox"] [role="option"], .select__option, [class*="option"]');
+              let clickedOption = false;
+              
+              for (const option of dropdownOptions) {
+                const style = window.getComputedStyle(option);
+                if (style.display !== 'none' && style.visibility !== 'hidden') {
+                  console.log('Streamline: Found dropdown option, clicking:', option.textContent?.substring(0, 50));
+                  option.click();
+                  clickedOption = true;
+                  break;
+                }
+              }
+              
+              // If no option found, press Enter
+              if (!clickedOption) {
+                console.log('Streamline: No dropdown option found, pressing Enter');
+                field.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                field.element.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+              }
+              
+              await new Promise(resolve => setTimeout(resolve, 200));
+              
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Typed university and selected:', universityValue);
+            } catch (error) {
+              console.error('Streamline: Error filling university field:', error);
+            }
+          }
+          
+          if (filled) return;
+        }
+      }
+      
+      // Check for degree type dropdown
+      if (isDegreeQuestion(field)) {
+        console.log('Streamline: Degree question detected', { label: field.label });
+        
+        const degreeValues = getEducationValue(field, profile, 'degree');
+        if (degreeValues) {
+          let filled = false;
+          const valuesToTry = Array.isArray(degreeValues) ? degreeValues : [degreeValues];
+          
+          if (isNativeSelect) {
+            const options = Array.from(field.element.options);
+            let targetOption = null;
+            
+            // Try each degree variation
+            for (const value of valuesToTry) {
+              const valueLower = value.toLowerCase();
+              targetOption = options.find(opt => {
+                const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+                return optText === valueLower || optText.includes(valueLower) || valueLower.includes(optText);
+              });
+              if (targetOption) break;
+            }
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Filled degree dropdown:', targetOption.text);
+            }
+          } else {
+            // Try each degree variation for custom dropdowns
+            for (const value of valuesToTry) {
+              filled = await fillDropdownField(field.element, value, field);
+              if (filled) {
+                filledCount++;
+                filledFields.push(field.label);
+                console.log('Streamline: Filled degree dropdown (custom):', value);
+                break;
+              }
+            }
+          }
+          
+          if (filled) return;
+        }
+      }
+      
+      // Check for major/field of study dropdown
+      if (isMajorQuestion(field)) {
+        console.log('Streamline: Major question detected', { label: field.label });
+        
+        const majorValue = getEducationValue(field, profile, 'major');
+        if (majorValue) {
+          let filled = false;
+          
+          if (isNativeSelect) {
+            const options = Array.from(field.element.options);
+            const valueLower = majorValue.toLowerCase();
+            
+            // Try exact match first, then partial match
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === valueLower;
+            }) || options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText.includes(valueLower) || valueLower.includes(optText);
+            });
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Filled major dropdown:', targetOption.text);
+            }
+          } else {
+            filled = await fillDropdownField(field.element, majorValue, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Filled major dropdown (custom):', majorValue);
+            }
+          }
+          
+          if (filled) return;
+        }
+      }
+      
+      // Check for education year fields (graduation year, start year)
+      if (isEducationYearQuestion(field) || isEducationStartYearQuestion(field)) {
+        console.log('Streamline: Education year question detected', { 
+          label: field.label,
+          tagName: field.element.tagName,
+          type: field.element.type,
+          isNativeSelect 
+        });
+        
+        const yearValue = getEducationDateValue(field, profile, 'year');
+        console.log('Streamline: Year value from profile:', yearValue);
+        
+        if (yearValue) {
+          let filled = false;
+          
+          if (isNativeSelect) {
+            // Year dropdown
+            const options = Array.from(field.element.options);
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').trim();
+              return optText === yearValue || optText.includes(yearValue);
+            });
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Filled year dropdown:', targetOption.text);
+            }
+          } else if (field.element.tagName === 'INPUT') {
+            // Year text input (any input type)
+            console.log('Streamline: Filling year text input with:', yearValue);
+            
+            field.element.focus();
+            field.element.click();
+            
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(field.element, yearValue);
+            } else {
+              field.element.value = yearValue;
+            }
+            field.element.dispatchEvent(new Event('input', { bubbles: true }));
+            field.element.dispatchEvent(new Event('change', { bubbles: true }));
+            field.element.dispatchEvent(new Event('blur', { bubbles: true }));
+            
+            filledCount++;
+            filledFields.push(field.label);
+            filled = true;
+            console.log('Streamline: Filled year text field:', yearValue);
+          }
+          
+          if (filled) return;
+        } else {
+          console.log('Streamline: No year value found in profile');
+        }
+      }
+      
+      // Check for education month dropdowns
+      if (isEducationMonthQuestion(field)) {
+        console.log('Streamline: Education month question detected', { 
+          label: field.label,
+          tagName: field.element.tagName,
+          isNativeSelect 
+        });
+        
+        const monthValue = getEducationDateValue(field, profile, 'month');
+        console.log('Streamline: Month value from profile:', monthValue);
+        
+        if (monthValue && (monthValue.name || monthValue.number)) {
+          let filled = false;
+          
+          if (isNativeSelect) {
+            const options = Array.from(field.element.options);
+            
+            // Try matching by month name first, then by number
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === monthValue.name.toLowerCase() || 
+                     optText.startsWith(monthValue.name.toLowerCase().substring(0, 3)); // "Jan" matches "January"
+            });
+            
+            // Try by number if name didn't match
+            if (!targetOption && monthValue.number) {
+              targetOption = options.find(opt => {
+                const optValue = (opt.value || '').trim();
+                const optText = (opt.text || '').trim();
+                return optValue === monthValue.number || optText === monthValue.number ||
+                       optValue === monthValue.number.padStart(2, '0'); // "1" or "01"
+              });
+            }
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              filled = true;
+              console.log('Streamline: Filled month dropdown:', targetOption.text);
+            }
+          } else {
+            // Custom dropdown - try month name
+            filled = await fillDropdownField(field.element, monthValue.name, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Filled month dropdown (custom):', monthValue.name);
+            }
+          }
+          
+          if (filled) return;
+        }
+      }
+      
       if (isWorkAuthorizationQuestion(field)) {
         console.log('Streamline: Work authorization question detected', {
           label: field.label,
@@ -2342,76 +3018,8 @@ async function autofillForm() {
           filledFields.push(field.label);
         }
       } else {
-        // No profile match - fill remaining dropdowns with "Yes"
-        if (isNativeSelect || isCustomSelect) {
-          console.log('Streamline: No profile match for dropdown, filling with "Yes":', field.label);
-          const targetValue = 'Yes';
-          
-          if (isNativeSelect) {
-            // Native select - try to find "Yes" option
-            const options = Array.from(field.element.options);
-            const targetLower = targetValue.toLowerCase();
-            
-            // Try exact match first
-            let targetOption = options.find(opt => {
-              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
-              return optText === targetLower;
-            });
-            
-            // If no exact match, try single letter (y)
-            if (!targetOption) {
-              targetOption = options.find(opt => {
-                const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
-                return optText === 'y';
-              });
-            }
-            
-            // Fallback to includes matching
-            if (!targetOption) {
-              targetOption = options.find(opt => {
-                const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
-                return optText.includes(targetLower) || targetLower.includes(optText);
-              });
-            }
-            
-            if (targetOption) {
-              field.element.value = targetOption.value;
-              field.element.selectedIndex = Array.from(field.element.options).indexOf(targetOption);
-              
-              // Trigger events
-              field.element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-              
-              // Trigger React/other framework updates
-              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
-              if (nativeInputValueSetter) {
-                nativeInputValueSetter.call(field.element, targetOption.value);
-              }
-              
-              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-              
-              // Force focus/blur to trigger validation
-              field.element.focus();
-              field.element.blur();
-              
-              filledCount++;
-              filledFields.push(field.label);
-              console.log('Streamline: Successfully filled dropdown with "Yes" (native select):', field.label);
-            } else {
-              console.log('Streamline: Could not find "Yes" option for dropdown (native select):', field.label);
-            }
-          } else if (isCustomSelect) {
-            // Custom React Select - use fillDropdownField
-            const filled = await fillDropdownField(field.element, targetValue, field);
-            if (filled) {
-              filledCount++;
-              filledFields.push(field.label);
-              console.log('Streamline: Successfully filled dropdown with "Yes" (React Select):', field.label);
-            } else {
-              console.log('Streamline: Failed to fill dropdown with "Yes" (React Select):', field.label);
-            }
-          }
-        }
+        // No profile match - leave non-standard dropdowns blank for manual completion
+        console.log('Streamline: No profile match for dropdown, leaving blank:', field.label);
       }
     };
     

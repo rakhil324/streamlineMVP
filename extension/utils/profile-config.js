@@ -51,14 +51,26 @@ function transformDatabaseProfile(dbProfile) {
   }
   
   // Transform education array
-  const education = (dbProfile.education || []).map(edu => ({
-    school: edu.school || '',
-    degree: edu.degree || '',
-    field: edu.fieldOfStudy || '',
-    years: edu.graduationDate ? 
-      `${edu.current ? 'Expected ' : ''}${new Date(edu.graduationDate).getFullYear()}` : '',
-    gpa: edu.gpa || '',
-  }));
+  const education = (dbProfile.education || []).map(edu => {
+    const gradDate = edu.graduationDate ? new Date(edu.graduationDate) : null;
+    const startDate = edu.startDate ? new Date(edu.startDate) : null;
+    
+    return {
+      school: edu.school || '',
+      degree: edu.degree || '',
+      field: edu.fieldOfStudy || '',
+      years: gradDate ? `${edu.current ? 'Expected ' : ''}${gradDate.getFullYear()}` : '',
+      gpa: edu.gpa || '',
+      current: edu.current || false,
+      // Raw date components for form filling
+      graduationYear: gradDate ? gradDate.getFullYear().toString() : '',
+      graduationMonth: gradDate ? (gradDate.getMonth() + 1).toString() : '', // 1-12
+      graduationMonthName: gradDate ? gradDate.toLocaleString('en-US', { month: 'long' }) : '', // "January", etc.
+      startYear: startDate ? startDate.getFullYear().toString() : '',
+      startMonth: startDate ? (startDate.getMonth() + 1).toString() : '',
+      startMonthName: startDate ? startDate.toLocaleString('en-US', { month: 'long' }) : '',
+    };
+  });
   
   // Transform experience array
   const experience = (dbProfile.experience || []).map(exp => ({

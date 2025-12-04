@@ -15,9 +15,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, path: '/' },
-  { name: 'Job Search', icon: <Search className="w-5 h-5" />, path: '/search' },
   { name: 'Tracker', icon: <CheckSquare className="w-5 h-5" />, path: '/tracker' },
-  { name: 'Saved Jobs', icon: <Bookmark className="w-5 h-5" />, path: '/saved' },
   { name: 'AI Tools', icon: <Sparkles className="w-5 h-5" />, path: '/ai-tools' },
   { name: 'Profile', icon: <User className="w-5 h-5" />, path: '/profile' },
   { name: 'Settings', icon: <Settings className="w-5 h-5" />, path: '/settings' },

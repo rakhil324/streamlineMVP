@@ -10,6 +10,10 @@ import { getProfileData as getProfileFromConfig, PROFILE_CONFIG } from '../utils
 const storageManager = new StorageManager();
 const apiClient = new APIClient();
 
+// Track selected resume for autofill
+let selectedResumeId = null;
+let tailoredResumes = [];
+
 // Note: Functions are assigned to window at the bottom of the file
 // after they're defined. For now, we'll use event listeners as the primary method.
 
@@ -135,6 +139,9 @@ async function initializePopup() {
     }
   });
   
+  // Fetch tailored resumes
+  fetchTailoredResumes();
+  
   
   // Add event listeners for buttons (both from HTML and dynamically created)
   const syncBtn = document.getElementById('syncProfileBtn');
@@ -238,6 +245,115 @@ window.testProfile = async function() {
     return { error: err.message };
   }
 };
+
+/**
+ * Fetch tailored resumes from the API
+ */
+async function fetchTailoredResumes() {
+  try {
+    const resumeList = document.getElementById('resume-list');
+    const resumeSelector = document.getElementById('resume-selector');
+    
+    if (resumeList) {
+      resumeList.innerHTML = '<div class="resume-loading">Loading resumes...</div>';
+    }
+    
+    // Fetch from API
+    const response = await fetch('http://localhost:3000/api/tailored-resumes', {
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Not logged in - hide selector
+        if (resumeSelector) resumeSelector.style.display = 'none';
+        return;
+      }
+      throw new Error('Failed to fetch resumes');
+    }
+    
+    const data = await response.json();
+    tailoredResumes = data.resumes || [];
+    
+    // Show selector if we have resumes
+    if (resumeSelector && tailoredResumes.length > 0) {
+      resumeSelector.style.display = 'block';
+      displayResumeList();
+    } else if (resumeSelector) {
+      resumeSelector.style.display = 'none';
+    }
+    
+  } catch (error) {
+    console.error('Error fetching tailored resumes:', error);
+    const resumeSelector = document.getElementById('resume-selector');
+    if (resumeSelector) resumeSelector.style.display = 'none';
+  }
+}
+
+/**
+ * Display the list of tailored resumes
+ */
+function displayResumeList() {
+  const resumeList = document.getElementById('resume-list');
+  if (!resumeList) return;
+  
+  if (tailoredResumes.length === 0) {
+    resumeList.innerHTML = '<div class="resume-empty">No tailored resumes yet. Generate one from the AI Tools page.</div>';
+    return;
+  }
+  
+  // Add "Original Resume" option first
+  let html = `
+    <div class="resume-item ${!selectedResumeId ? 'selected' : ''}" data-resume-id="">
+      <div class="resume-item-radio"></div>
+      <div class="resume-item-info">
+        <div class="resume-item-title">Original Resume</div>
+        <div class="resume-item-subtitle">Use your profile resume</div>
+      </div>
+      <span class="resume-item-badge original">Default</span>
+    </div>
+  `;
+  
+  // Add tailored resumes
+  tailoredResumes.forEach(resume => {
+    const date = new Date(resume.createdAt).toLocaleDateString();
+    html += `
+      <div class="resume-item ${selectedResumeId === resume.id ? 'selected' : ''}" data-resume-id="${resume.id}">
+        <div class="resume-item-radio"></div>
+        <div class="resume-item-info">
+          <div class="resume-item-title">${resume.companyName} - ${resume.jobTitle}</div>
+          <div class="resume-item-subtitle">${date}</div>
+        </div>
+        <span class="resume-item-badge">Tailored</span>
+      </div>
+    `;
+  });
+  
+  resumeList.innerHTML = html;
+  
+  // Add click handlers
+  resumeList.querySelectorAll('.resume-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const resumeId = item.dataset.resumeId;
+      selectedResumeId = resumeId || null;
+      
+      // Update UI
+      resumeList.querySelectorAll('.resume-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      
+      console.log('Selected resume:', selectedResumeId || 'Original');
+    });
+  });
+  
+  // Add manage link handler
+  const manageLink = document.getElementById('manageResumesLink');
+  if (manageLink) {
+    manageLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'http://localhost:3000/ai-tools' });
+    });
+  }
+}
 
 /**
  * Initialize tab switching
@@ -475,9 +591,16 @@ function showApplicationFormUI() {
     const h3 = readySection.querySelector('h3');
     const p = readySection.querySelector('p');
     if (h3) h3.textContent = 'Ready to autofill?';
-    if (p) p.textContent = 'Click below to automatically fill out this application form.';
+    if (p) p.textContent = 'Select a resume and click below to fill out this application.';
   }
   document.getElementById('autofill-ready').classList.remove('hidden');
+  
+  // Show resume selector and fetch resumes
+  const resumeSelector = document.getElementById('resume-selector');
+  if (resumeSelector) {
+    resumeSelector.style.display = 'block';
+    fetchTailoredResumes();
+  }
   
   // Ensure button is enabled with hardcoded profile
   (async () => {
@@ -1370,6 +1493,7 @@ async function handleAutofillApplication() {
       data: {
         tabId: tab.id,
         tailorRequest: false, // Just autofill, don't tailor
+        selectedResumeId: selectedResumeId, // Pass selected resume ID
       },
     }, (response) => {
       if (chrome.runtime.lastError) {

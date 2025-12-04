@@ -9,9 +9,7 @@ import { Menu, X, User, LogOut, LayoutDashboard, Search, CheckSquare, Bookmark, 
 
 const navItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { name: 'Job Search', path: '/search', icon: Search },
   { name: 'Tracker', path: '/tracker', icon: CheckSquare },
-  { name: 'Saved Jobs', path: '/saved', icon: Bookmark },
   { name: 'AI Tools', path: '/ai-tools', icon: Sparkles },
   { name: 'Profile', path: '/profile', icon: User },
   { name: 'Settings', path: '/settings', icon: Settings },
