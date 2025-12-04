@@ -714,6 +714,213 @@ class WorkdayHandler {
   }
 
   /**
+   * Fill Workday date/year field with proper validation triggering
+   * This method is specifically designed to make Workday recognize the filled value
+   * It handles Workday's specific date field structure with display divs and parent containers
+   */
+  async fillWorkdayDateField(element, value) {
+    if (!element || !value) return false;
+    
+    try {
+      console.log(`🔵 Filling Workday date field with: "${value}"`);
+      
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      
+      // Find all parent containers in the hierarchy
+      const inputId = element.id || '';
+      const dateSectionId = inputId.replace('-input', '');
+      const dateSection = document.getElementById(dateSectionId);
+      const displayDiv = document.getElementById(`${dateSectionId}-display`);
+      
+      // Find dateInputWrapper (grandparent)
+      let dateInputWrapper = null;
+      if (inputId.includes('-dateSectionMonth-')) {
+        dateInputWrapper = document.getElementById(inputId.replace('-dateSectionMonth-input', ''));
+      } else if (inputId.includes('-dateSectionYear-')) {
+        dateInputWrapper = document.getElementById(inputId.replace('-dateSectionYear-input', ''));
+      }
+      
+      // Step 1: Click display div to open picker
+      if (displayDiv) {
+        displayDiv.click();
+      } else if (dateSection) {
+        dateSection.click();
+      }
+      await new Promise(resolve => setTimeout(resolve, 30));
+      
+      // Step 2: Focus and clear
+      element.focus();
+      element.select();
+      if (nativeValueSetter) {
+        nativeValueSetter.call(element, '');
+      } else {
+        element.value = '';
+      }
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      // Step 3: Type value character by character (faster)
+      for (let i = 0; i < value.length; i++) {
+        const char = value[i];
+        const currentValue = value.substring(0, i + 1);
+        
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: char, code: `Digit${char}`,
+          keyCode: char.charCodeAt(0), which: char.charCodeAt(0)
+        }));
+        
+        if (nativeValueSetter) {
+          nativeValueSetter.call(element, currentValue);
+        } else {
+          element.value = currentValue;
+        }
+        
+        if (element._valueTracker) {
+          element._valueTracker.setValue(currentValue);
+        }
+        
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true, cancelable: true,
+          inputType: 'insertText', data: char
+        }));
+        
+        element.dispatchEvent(new KeyboardEvent('keyup', {
+          bubbles: true, cancelable: true,
+          key: char, code: `Digit${char}`,
+          keyCode: char.charCodeAt(0), which: char.charCodeAt(0)
+        }));
+        
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      
+      // Step 4: Update React state
+      this.updateReactState(element, value);
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      
+      // Step 5: Press Enter to confirm
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true,
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+      }));
+      element.dispatchEvent(new KeyboardEvent('keyup', {
+        bubbles: true, cancelable: true,
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+      }));
+      await new Promise(resolve => setTimeout(resolve, 30));
+      
+      // Step 6: Blur
+      element.dispatchEvent(new FocusEvent('blur', { bubbles: true, cancelable: true }));
+      element.blur();
+      await new Promise(resolve => setTimeout(resolve, 30));
+      
+      // Step 7: Handle dropdown if appeared
+      const listbox = document.querySelector('[role="listbox"]');
+      if (listbox && listbox.offsetParent !== null) {
+        const options = listbox.querySelectorAll('[role="option"]');
+        for (const option of options) {
+          const optionText = (option.textContent || '').trim();
+          if (optionText === value || optionText.includes(value) || value.includes(optionText)) {
+            option.click();
+            await new Promise(resolve => setTimeout(resolve, 30));
+            break;
+          }
+        }
+      }
+      
+      // Step 8: Update display div with original value (keep leading zeros)
+      if (displayDiv) {
+        displayDiv.textContent = value;
+        displayDiv.innerText = value;
+      }
+      
+      // Step 9: Trigger events on parent containers
+      if (dateSection) {
+        dateSection.dispatchEvent(new Event('input', { bubbles: true }));
+        dateSection.dispatchEvent(new Event('change', { bubbles: true }));
+        dateSection.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      }
+      if (dateInputWrapper) {
+        dateInputWrapper.dispatchEvent(new Event('input', { bubbles: true }));
+        dateInputWrapper.dispatchEvent(new Event('change', { bubbles: true }));
+        dateInputWrapper.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      }
+      
+      // Step 10: Final cleanup
+      document.body.click();
+      element.blur();
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      this.updateReactState(element, value);
+      
+      await new Promise(resolve => setTimeout(resolve, 20));
+      
+      // Verify success
+      const finalValue = element.value || '';
+      console.log(`  📋 Date field final value: "${finalValue}"`);
+      
+      // Consider success if value matches (with or without leading zeros)
+      const valueWithoutLeadingZeros = value.replace(/^0+/, '') || value;
+      if (finalValue === value || finalValue === valueWithoutLeadingZeros || finalValue.length > 0) {
+        this.showFieldFilled(element);
+        return true;
+      }
+      
+      // Quick retry if needed
+      if (displayDiv) displayDiv.click();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      element.focus();
+      element.select();
+      
+      if (nativeValueSetter) {
+        nativeValueSetter.call(element, value);
+      } else {
+        element.value = value;
+      }
+      if (element._valueTracker) {
+        element._valueTracker.setValue(value);
+      }
+      this.updateReactState(element, value);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Press Enter to confirm
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true,
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+      }));
+      
+      // Click body to close
+      document.body.click();
+      element.blur();
+      
+      // Trigger on parents again
+      if (dateSection) {
+        dateSection.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (dateInputWrapper) {
+        dateInputWrapper.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 20));
+      
+      const retryValue = element.value || '';
+      if (retryValue.length > 0) {
+        this.showFieldFilled(element);
+        return true;
+      }
+      
+      return false;
+      
+    } catch (error) {
+      console.error('Error in fillWorkdayDateField:', error);
+      return false;
+    }
+  }
+
+  /**
    * Helper: format month number to two digits (defaults to January if invalid)
    */
   formatMonth(monthNumber, fallback = '01') {
@@ -1109,7 +1316,6 @@ class WorkdayHandler {
 
   /**
    * Fill a typeahead/autocomplete dropdown by typing and selecting from dropdown
-   * This works for Workday fields like "Field of Study" that filter as you type
    */
   async fillTypeAndSelectDropdown(element, value) {
     if (!element || !value) return false;
@@ -2382,6 +2588,13 @@ class WorkdayHandler {
           console.log('✅ Filled coverLetter');
         }
       }
+
+      // ========== CUSTOM QUESTIONS AUTOFILL ==========
+      // Fill questions that can be answered from profile data
+      console.log('🔵 ========== CUSTOM QUESTIONS SECTION ==========');
+      const customQuestionsFilled = await this.fillCustomQuestions(data);
+      filledCount += customQuestionsFilled;
+      console.log(`✅ Filled ${customQuestionsFilled} custom questions`);
 
       // Wait a bit for all fields to be processed
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -4831,6 +5044,50 @@ class WorkdayHandler {
           console.warn(`  ⚠️ No company data provided for experience entry ${i + 1}`);
         }
         
+        // Find and fill location
+        const location = exp.location || '';
+        if (location) {
+          console.log(`  🔍 Looking for location field with value: "${location}"`);
+          const locationField = this.findFieldInContainer(experienceForm, [
+            'input[id*="location" i]',
+            'input[name*="location" i]',
+            'input[aria-label*="location" i]',
+            'input[data-automation-id*="location" i]',
+            'input[id*="city" i]',
+            'input[name*="city" i]',
+          ]);
+          
+          if (locationField) {
+            console.log(`  ✅ Found location field:`, {
+              id: locationField.id,
+              name: locationField.name,
+              type: locationField.type,
+              currentValue: locationField.value || 'empty'
+            });
+            const filled = await this.fillField(locationField, location);
+            
+            await new Promise(resolve => setTimeout(resolve, 50));
+            const verifyValue = locationField.value || '';
+            
+            if (filled && verifyValue && verifyValue.trim().length > 0) {
+              console.log(`  ✅ Filled location: "${location}" (verified: "${verifyValue}")`);
+              filledCount++;
+            } else if (filled) {
+              // Retry with direct method
+              this.setNativeInputValue(locationField, location);
+              this.updateReactState(locationField, location);
+              await new Promise(resolve => setTimeout(resolve, 30));
+              const retryValue = locationField.value || '';
+              if (retryValue && retryValue.trim().length > 0) {
+                console.log(`  ✅ Retry successful for location: "${retryValue}"`);
+                filledCount++;
+              }
+            }
+          } else {
+            console.log(`  ⏭️ Location field not found in experience form`);
+          }
+        }
+        
         // Find and fill duration/date range
         if (duration) {
           console.log(`  🔍 Looking for date fields with duration: "${duration}"`);
@@ -4857,46 +5114,52 @@ class WorkdayHandler {
           let structuredFilled = false;
           let structuredLog = [];
           
-          // Define fillDatePart - use direct set for date fields to avoid stuttering
+          // Define fillDatePart - use fillWorkdayDateField for INPUT fields to properly trigger validation
           const fillDatePart = async (label, field, value) => {
             if (!field || !value) {
               console.log(`    ⏭️ Skipping ${label} - field or value missing`);
               return false;
             }
             
-            console.log(`  📅 Filling ${label} with value: "${value}"`);
+            console.log(`  📅 Filling ${label} (From/To) with value: "${value}"`);
             
-            // For date fields, use direct instant fill to avoid stuttering
             try {
-              // Focus first
-              field.focus();
+              let success = false;
               
-              // Set value directly using native setter
-              const nativeValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-              )?.set;
-              
-              if (nativeValueSetter) {
-                nativeValueSetter.call(field, value);
-              } else {
-                field.value = value;
+              if (field.tagName === 'INPUT') {
+                // Use the dedicated date field filler for proper validation
+                success = await this.fillWorkdayDateField(field, value);
+              } else if (field.tagName === 'SELECT') {
+                success = await this.fillSelectDropdown(field, value);
+              } else if (field.tagName === 'BUTTON' || field.tagName === 'DIV') {
+                success = await this.fillCustomDropdown(field, value);
               }
               
-              // Update React's value tracker
-              if (field._valueTracker) {
-                field._valueTracker.setValue('');
-                field._valueTracker.setValue(value);
+              // If still not successful, try direct approach
+              if (!success) {
+                field.focus();
+                
+                const nativeValueSetter = Object.getOwnPropertyDescriptor(
+                  window.HTMLInputElement.prototype, 'value'
+                )?.set;
+                
+                if (nativeValueSetter) {
+                  nativeValueSetter.call(field, value);
+                } else {
+                  field.value = value;
+                }
+                
+                if (field._valueTracker) {
+                  field._valueTracker.setValue(value);
+                }
+                
+                this.updateReactState(field, value);
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+                field.blur();
+                
+                await new Promise(resolve => setTimeout(resolve, 20));
               }
-              
-              // Update React state once
-              this.updateReactState(field, value);
-              
-              // Trigger single input and change event
-              field.dispatchEvent(new Event('input', { bubbles: true }));
-              field.dispatchEvent(new Event('change', { bubbles: true }));
-              
-              // Blur immediately
-              field.blur();
               
               const verifyValue = field.value || '';
               console.log(`    ✅ ${label} filled: "${verifyValue}"`);
@@ -4976,6 +5239,12 @@ class WorkdayHandler {
                   await this.fillCustomDropdown(clickable, value);
                 } else if (el.tagName === 'SELECT') {
                   await this.fillSelectDropdown(el, value);
+                } else if (el.tagName === 'INPUT') {
+                  // Use dedicated date field filler for proper validation
+                  const success = await this.fillWorkdayDateField(el, value);
+                  if (!success) {
+                    await this.fillField(el, value);
+                  }
                 } else {
                   const success = await this.fillField(el, value);
                   if (!success) {
@@ -5273,68 +5542,7 @@ class WorkdayHandler {
           }
         }
         
-        // Fill field of study (use extracted value from degree parsing, or from edu.field/edu.major)
-        const fieldOfStudy = extractedFieldOfStudy || edu.fieldOfStudy || edu.field || edu.major || '';
-        console.log(`  📋 Field of study value resolved: "${fieldOfStudy}" (from extractedFieldOfStudy="${extractedFieldOfStudy}", edu.fieldOfStudy="${edu.fieldOfStudy}", edu.field="${edu.field}", edu.major="${edu.major}")`);
-        
-        if (fieldOfStudy) {
-          console.log(`  🔍 Looking for field of study field with value: "${fieldOfStudy}"`);
-          const fieldOfStudyField = this.findFieldInContainer(educationForm, [
-            'input[id*="fieldOfStudy" i]',
-            'input[name*="fieldOfStudy" i]',
-            'input[aria-label*="field of study" i]',
-            'input[data-automation-id*="fieldOfStudy" i]',
-          ]);
-          
-          if (fieldOfStudyField) {
-            console.log(`  ✅ Found field of study field:`, {
-              id: fieldOfStudyField.id,
-              name: fieldOfStudyField.name,
-              type: fieldOfStudyField.type,
-              currentValue: fieldOfStudyField.value || 'empty'
-            });
-            
-            // Use Workday autocomplete fill method
-            console.log(`  📋 Filling field of study: "${fieldOfStudy}"`);
-            let fieldFilled = await this.fillWorkdayAutocomplete(fieldOfStudyField, fieldOfStudy);
-            
-            // Verify the value persisted
-            await new Promise(resolve => setTimeout(resolve, 100));
-            const verifyValue = fieldOfStudyField.value || '';
-            console.log(`  🔍 Field of study value after fill: "${verifyValue}"`);
-            
-            if (fieldFilled && verifyValue && verifyValue.trim().length > 0) {
-              console.log(`  ✅ Filled field of study: "${fieldOfStudy}" (verified: "${verifyValue}")`);
-              filledCount++;
-            } else {
-              console.warn(`  ⚠️ Autocomplete failed, trying type-and-select...`);
-              fieldFilled = await this.fillTypeAndSelectDropdown(fieldOfStudyField, fieldOfStudy);
-              await new Promise(resolve => setTimeout(resolve, 100));
-              const retryValue = fieldOfStudyField.value || '';
-              
-              if (fieldFilled && retryValue && retryValue.trim().length > 0) {
-                console.log(`  ✅ Filled field of study via type-and-select: "${retryValue}"`);
-                filledCount++;
-              } else {
-                console.warn(`  ⚠️ Type-and-select also failed, trying direct fill...`);
-                // Last resort: just type the value directly
-                fieldFilled = await this.fillField(fieldOfStudyField, fieldOfStudy);
-                await new Promise(resolve => setTimeout(resolve, 100));
-                const finalValue = fieldOfStudyField.value || '';
-                if (finalValue && finalValue.trim().length > 0) {
-                  console.log(`  ✅ Filled field of study via direct fill: "${finalValue}"`);
-                  filledCount++;
-                } else {
-                  console.warn(`  ⚠️ All methods failed to fill field of study field`);
-                }
-              }
-            }
-          } else {
-            console.warn(`  ⚠️ Could not find field of study field`);
-          }
-        } else {
-          console.log(`  ⏭️ No field of study value to fill`);
-        }
+        // NOTE: Field of study autofill disabled - requires manual selection
         
         // Fill degree
         if (degree) {
@@ -5513,33 +5721,41 @@ class WorkdayHandler {
               
               let startFilled = false;
               if (startDateEl.tagName === 'BUTTON' || startDateEl.tagName === 'DIV') {
-                console.log(`  Education start date is a ${startDateEl.tagName}, using custom dropdown`);
+                console.log(`  Education start date (From) is a ${startDateEl.tagName}, using custom dropdown`);
                 startFilled = await this.fillCustomDropdown(startDateEl, startYear);
               } else if (startDateEl.tagName === 'SELECT') {
-                console.log('  Education start date is a SELECT, using fillSelectDropdown');
+                console.log('  Education start date (From) is a SELECT, using fillSelectDropdown');
                 startFilled = await this.fillSelectDropdown(startDateEl, startYear);
               } else if (startDateEl.tagName === 'INPUT') {
-                console.log('  Education start date is an INPUT, trying fillField');
-                startFilled = await this.fillField(startDateEl, startYear);
+                console.log('  Education start date (From) is an INPUT, using fillWorkdayDateField');
+                startFilled = await this.fillWorkdayDateField(startDateEl, startYear);
                 if (!startFilled) {
-                  console.log('  Education start date fillField failed, trying direct set');
-                  this.setNativeInputValue(startDateEl, startYear);
-                  startFilled = true;
+                  console.log('  fillWorkdayDateField failed, trying fillField');
+                  startFilled = await this.fillField(startDateEl, startYear);
                 }
               }
               
               // Verify start date was set
               await new Promise(resolve => setTimeout(resolve, 200));
               const startValue = startDateEl.value || startDateEl.textContent || startDateEl.innerText || '';
-              console.log(`  🔍 Start date value after fill: "${startValue}"`);
+              console.log(`  🔍 Start date (From) value after fill: "${startValue}"`);
               if (startFilled && startValue.includes(startYear)) {
-                console.log(`  ✅ Start date filled: ${startYear}`);
+                console.log(`  ✅ Start date (From) filled: ${startYear}`);
               } else {
-                console.warn(`  ⚠️ Start date may not have filled correctly`);
+                console.warn(`  ⚠️ Start date (From) may not have filled correctly, trying one more approach...`);
+                // Extra retry with forced React update
+                if (startDateEl.tagName === 'INPUT') {
+                  startDateEl.focus();
+                  this.updateReactState(startDateEl, startYear);
+                  startDateEl.dispatchEvent(new Event('input', { bubbles: true }));
+                  startDateEl.dispatchEvent(new Event('change', { bubbles: true }));
+                  startDateEl.blur();
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
               }
               
               // Fill end date - handle buttons, divs, selects, and inputs
-              console.log(`  🔍 End date element:`, {
+              console.log(`  🔍 End date (To) element:`, {
                 tag: endDateEl.tagName,
                 id: endDateEl.id,
                 name: endDateEl.name
@@ -5547,29 +5763,37 @@ class WorkdayHandler {
               
               let endFilled = false;
               if (endDateEl.tagName === 'BUTTON' || endDateEl.tagName === 'DIV') {
-                console.log(`  Education end date is a ${endDateEl.tagName}, using custom dropdown`);
+                console.log(`  Education end date (To) is a ${endDateEl.tagName}, using custom dropdown`);
                 endFilled = await this.fillCustomDropdown(endDateEl, endYear);
               } else if (endDateEl.tagName === 'SELECT') {
-                console.log('  Education end date is a SELECT, using fillSelectDropdown');
+                console.log('  Education end date (To) is a SELECT, using fillSelectDropdown');
                 endFilled = await this.fillSelectDropdown(endDateEl, endYear);
               } else if (endDateEl.tagName === 'INPUT') {
-                console.log('  Education end date is an INPUT, trying fillField');
-                endFilled = await this.fillField(endDateEl, endYear);
+                console.log('  Education end date (To) is an INPUT, using fillWorkdayDateField');
+                endFilled = await this.fillWorkdayDateField(endDateEl, endYear);
                 if (!endFilled) {
-                  console.log('  Education end date fillField failed, trying direct set');
-                  this.setNativeInputValue(endDateEl, endYear);
-                  endFilled = true;
+                  console.log('  fillWorkdayDateField failed, trying fillField');
+                  endFilled = await this.fillField(endDateEl, endYear);
                 }
               }
               
               // Verify end date was set
               await new Promise(resolve => setTimeout(resolve, 200));
               const endValue = endDateEl.value || endDateEl.textContent || endDateEl.innerText || '';
-              console.log(`  🔍 End date value after fill: "${endValue}"`);
+              console.log(`  🔍 End date (To) value after fill: "${endValue}"`);
               if (endFilled && endValue.includes(endYear)) {
-                console.log(`  ✅ End date filled: ${endYear}`);
+                console.log(`  ✅ End date (To) filled: ${endYear}`);
               } else {
-                console.warn(`  ⚠️ End date may not have filled correctly`);
+                console.warn(`  ⚠️ End date (To) may not have filled correctly, trying one more approach...`);
+                // Extra retry with forced React update
+                if (endDateEl.tagName === 'INPUT') {
+                  endDateEl.focus();
+                  this.updateReactState(endDateEl, endYear);
+                  endDateEl.dispatchEvent(new Event('input', { bubbles: true }));
+                  endDateEl.dispatchEvent(new Event('change', { bubbles: true }));
+                  endDateEl.blur();
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
               }
               
               if (startFilled || endFilled) {
@@ -5646,6 +5870,768 @@ class WorkdayHandler {
       return filledCount;
     } catch (error) {
       console.error('❌ Error filling education:', error);
+      console.error('  Error stack:', error.stack);
+      return filledCount;
+    }
+  }
+
+  /**
+   * Fill custom questions that can be answered from profile data
+   * Only fills questions if the corresponding profile data exists
+   */
+  async fillCustomQuestions(data) {
+    let filledCount = 0;
+    
+    try {
+      console.log('🔵 ========== FILL CUSTOM QUESTIONS START ==========');
+      
+      // Helper to find dropdown/select by question text
+      const findQuestionDropdown = (questionKeywords) => {
+        // Look for labels containing the keywords
+        const labels = Array.from(document.querySelectorAll('label, legend, [data-automation-id*="label"], .css-label, div[class*="label"]'));
+        
+        for (const label of labels) {
+          const labelText = (label.textContent || label.innerText || '').toLowerCase();
+          const matchesAll = questionKeywords.every(kw => labelText.includes(kw.toLowerCase()));
+          
+          if (matchesAll) {
+            console.log(`  Found label matching keywords [${questionKeywords.join(', ')}]: "${labelText.substring(0, 80)}..."`);
+            
+            // Look for associated dropdown/select near this label
+            const parent = label.closest('[data-automation-id]') || label.parentElement?.parentElement || label.parentElement;
+            if (parent) {
+              // Try to find dropdown button or select
+              const dropdown = parent.querySelector('button[aria-haspopup="listbox"], select, [role="combobox"], [role="listbox"], button[data-automation-id*="dropdown"], button[data-automation-id*="select"]');
+              if (dropdown && dropdown.offsetParent !== null) {
+                return { label, dropdown, labelText };
+              }
+              
+              // Also check siblings
+              let sibling = label.nextElementSibling;
+              while (sibling) {
+                const dropdownInSibling = sibling.querySelector('button[aria-haspopup="listbox"], select, [role="combobox"]') || 
+                                          (sibling.matches('button[aria-haspopup="listbox"], select, [role="combobox"]') ? sibling : null);
+                if (dropdownInSibling && dropdownInSibling.offsetParent !== null) {
+                  return { label, dropdown: dropdownInSibling, labelText };
+                }
+                sibling = sibling.nextElementSibling;
+              }
+            }
+          }
+        }
+        return null;
+      };
+      
+      // Helper to find text input by question text
+      const findQuestionInput = (questionKeywords) => {
+        const labels = Array.from(document.querySelectorAll('label, legend, [data-automation-id*="label"], .css-label, div[class*="label"]'));
+        
+        for (const label of labels) {
+          const labelText = (label.textContent || label.innerText || '').toLowerCase();
+          const matchesAll = questionKeywords.every(kw => labelText.includes(kw.toLowerCase()));
+          
+          if (matchesAll) {
+            console.log(`  Found label matching keywords [${questionKeywords.join(', ')}]: "${labelText.substring(0, 80)}..."`);
+            
+            // Look for associated input near this label
+            const parent = label.closest('[data-automation-id]') || label.parentElement?.parentElement || label.parentElement;
+            if (parent) {
+              const input = parent.querySelector('input[type="text"], input:not([type]), textarea');
+              if (input && input.offsetParent !== null && !input.disabled && !input.readOnly) {
+                return { label, input, labelText };
+              }
+              
+              // Check for input referenced by label's "for" attribute
+              if (label.htmlFor) {
+                const forInput = document.getElementById(label.htmlFor);
+                if (forInput && forInput.offsetParent !== null) {
+                  return { label, input: forInput, labelText };
+                }
+              }
+            }
+          }
+        }
+        return null;
+      };
+      
+      // Helper to fill text input with proper React validation triggering
+      const fillTextInputWithValidation = async (input, value) => {
+        try {
+          console.log(`    Filling input with value: "${value}"`);
+          console.log(`    Input element:`, input?.tagName, input?.id, input?.type);
+          
+          if (!input || !input.tagName) {
+            console.error('    Invalid input element');
+            return false;
+          }
+          
+          // Get the native value setter for the specific element type
+          const isTextarea = input.tagName.toUpperCase() === 'TEXTAREA';
+          const nativeInputValueSetter = isTextarea 
+            ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+            : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+          
+          // Step 1: Focus and click the input
+          input.focus();
+          input.click();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Step 2: Clear using select all + delete
+          input.select();
+          await new Promise(resolve => setTimeout(resolve, 50));
+          document.execCommand('delete', false, null);
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          // Also clear directly
+          if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(input, '');
+          }
+          input.value = '';
+          
+          // Step 3: Type each character using execCommand (most compatible with React)
+          for (const char of value) {
+            document.execCommand('insertText', false, char);
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          
+          // Step 4: Verify and set value directly if execCommand failed
+          if (input.value !== value) {
+            console.log(`    execCommand failed, using direct set. Current: "${input.value}"`);
+            if (nativeInputValueSetter) {
+              nativeInputValueSetter.call(input, value);
+            }
+            input.value = value;
+            
+            // Update React's value tracker
+            const tracker = input._valueTracker;
+            if (tracker) {
+              tracker.setValue('');
+            }
+            
+            // Dispatch input event
+            input.dispatchEvent(new InputEvent('input', {
+              bubbles: true,
+              cancelable: true,
+              inputType: 'insertText',
+              data: value
+            }));
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          // Step 5: Trigger change event
+          input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+          
+          // Step 6: Blur to trigger validation - critical for Workday
+          input.blur();
+          
+          // Multiple blur events for different Workday listeners
+          input.dispatchEvent(new FocusEvent('blur', { bubbles: true, relatedTarget: null }));
+          input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+          
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Step 7: Trigger events on parent containers (Workday listens at multiple levels)
+          let parent = input.parentElement;
+          for (let i = 0; i < 5 && parent; i++) {
+            parent.dispatchEvent(new Event('change', { bubbles: true }));
+            parent.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+            if (parent.getAttribute('data-automation-id')) {
+              break; // Stop at the data-automation-id container
+            }
+            parent = parent.parentElement;
+          }
+          
+          // Step 8: Click somewhere else to ensure blur
+          document.body.click();
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          // Step 9: Re-focus and blur one more time (belt and suspenders)
+          input.focus();
+          await new Promise(resolve => setTimeout(resolve, 30));
+          input.blur();
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          console.log(`    Input value after fill: "${input.value}"`);
+          return input.value === value;
+        } catch (error) {
+          console.error('    Error filling text input:', error?.message || error, error?.stack);
+          return false;
+        }
+      };
+      
+      // Helper to select dropdown option
+      const selectDropdownOption = async (dropdown, optionText) => {
+        try {
+          console.log(`    Attempting to select "${optionText}" from dropdown`);
+          
+          // Click to open dropdown
+          dropdown.click();
+          dropdown.focus();
+          await new Promise(resolve => setTimeout(resolve, 150));
+          
+          // Look for options
+          const options = Array.from(document.querySelectorAll('[role="option"], [role="menuitem"], li[data-automation-id], option'));
+          const targetOption = options.find(opt => {
+            const optText = (opt.textContent || opt.innerText || '').toLowerCase().trim();
+            return optText === optionText.toLowerCase() || optText.includes(optionText.toLowerCase());
+          });
+          
+          if (targetOption) {
+            console.log(`    Found option: "${targetOption.textContent?.trim()}"`);
+            targetOption.click();
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return true;
+          } else {
+            console.log(`    Option "${optionText}" not found in dropdown`);
+            // Close dropdown by pressing Escape
+            dropdown.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            return false;
+          }
+        } catch (error) {
+          console.error('    Error selecting dropdown option:', error);
+          return false;
+        }
+      };
+      
+      // ========== 1. WORK AUTHORIZATION / RIGHT TO WORK ==========
+      // "If you are offered employment... can you provide documentation establishing your identity and right to work..."
+      const authorizedToWork = data.workAuthorization?.authorizedToWork ?? data.authorizedToWork;
+      if (authorizedToWork !== undefined && authorizedToWork !== null) {
+        console.log('  🔵 Looking for work authorization question...');
+        console.log(`    Profile value: authorizedToWork = ${authorizedToWork}`);
+        
+        const workAuthQuestion = findQuestionDropdown(['documentation', 'right to work']) || 
+                                  findQuestionDropdown(['identity', 'right to work']) ||
+                                  findQuestionDropdown(['authorized', 'work']);
+        
+        if (workAuthQuestion) {
+          const optionToSelect = authorizedToWork ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(workAuthQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled work authorization: ${optionToSelect}`);
+          }
+        } else {
+          console.log('  ⚠️ Work authorization dropdown not found on page');
+        }
+      } else {
+        console.log('  ⏭️ Skipping work authorization - not in profile');
+      }
+      
+      // ========== 2. SPONSORSHIP REQUIREMENT ==========
+      // "Will you now or in the future require sponsorship for employment visa status..."
+      const requiresSponsorship = data.workAuthorization?.requiresSponsorship ?? data.requiresSponsorship;
+      if (requiresSponsorship !== undefined && requiresSponsorship !== null) {
+        console.log('  🔵 Looking for sponsorship question...');
+        console.log(`    Profile value: requiresSponsorship = ${requiresSponsorship}`);
+        
+        const sponsorshipQuestion = findQuestionDropdown(['sponsorship', 'visa']) ||
+                                    findQuestionDropdown(['require', 'sponsorship']) ||
+                                    findQuestionDropdown(['H-1B']);
+        
+        if (sponsorshipQuestion) {
+          const optionToSelect = requiresSponsorship ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(sponsorshipQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled sponsorship requirement: ${optionToSelect}`);
+          }
+        } else {
+          console.log('  ⚠️ Sponsorship dropdown not found on page');
+        }
+      } else {
+        console.log('  ⏭️ Skipping sponsorship - not in profile');
+      }
+      
+      // ========== 3. GRADUATION DATE (MM/YYYY) ==========
+      // "What is your current estimated graduation date?"
+      const education = data.education?.[0];
+      if (education?.years) {
+        console.log('  🔵 Looking for graduation date question...');
+        console.log(`    Profile value: education.years = "${education.years}"`);
+        
+        // Parse graduation date from "Expected 2028" or "2024 - 2028" format
+        let graduationDate = null;
+        const expectedMatch = education.years.match(/expected\s+(\d{4})/i);
+        const rangeMatch = education.years.match(/(\d{4})\s*[-–]\s*(\d{4})/);
+        const yearMatch = education.years.match(/(\d{4})/);
+        
+        if (expectedMatch) {
+          graduationDate = `05/${expectedMatch[1]}`; // Default to May graduation
+        } else if (rangeMatch) {
+          graduationDate = `05/${rangeMatch[2]}`; // Use end year
+        } else if (yearMatch) {
+          graduationDate = `05/${yearMatch[1]}`;
+        }
+        
+        if (graduationDate) {
+          console.log(`    Parsed graduation date: ${graduationDate}`);
+          
+          const gradQuestion = findQuestionInput(['graduation', 'date']) ||
+                               findQuestionInput(['estimated', 'graduation']);
+          
+          if (gradQuestion) {
+            // Use the validation-triggering fill function
+            const filled = await fillTextInputWithValidation(gradQuestion.input, graduationDate);
+            if (filled) {
+              filledCount++;
+              console.log(`  ✅ Filled graduation date: ${graduationDate}`);
+            } else {
+              // Retry with standard fill
+              console.log('  ⚠️ First fill attempt failed, retrying...');
+              await this.fillField(gradQuestion.input, graduationDate);
+              filledCount++;
+            }
+          } else {
+            console.log('  ⚠️ Graduation date input not found on page');
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping graduation date - not in profile');
+      }
+      
+      // ========== 4. DEGREE MAJOR/MINOR ==========
+      // "What is your degree major and/or minor?"
+      const fieldOfStudy = education?.field || education?.major;
+      if (fieldOfStudy) {
+        console.log('  🔵 Looking for major/minor question...');
+        console.log(`    Profile value: field = "${fieldOfStudy}"`);
+        
+        const majorQuestion = findQuestionInput(['major', 'minor']) ||
+                              findQuestionInput(['degree', 'major']) ||
+                              findQuestionInput(['field', 'study']);
+        
+        if (majorQuestion) {
+          // Combine major with minor if available
+          let answer = fieldOfStudy;
+          if (education.minor) {
+            answer = `${fieldOfStudy}, Minor: ${education.minor}`;
+          }
+          
+          // Use the validation-triggering fill function
+          const filled = await fillTextInputWithValidation(majorQuestion.input, answer);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled major/minor: ${answer}`);
+          } else {
+            // Retry with standard fill
+            console.log('  ⚠️ First fill attempt failed, retrying...');
+            await this.fillField(majorQuestion.input, answer);
+            filledCount++;
+          }
+        } else {
+          console.log('  ⚠️ Major/minor input not found on page');
+        }
+      } else {
+        console.log('  ⏭️ Skipping major/minor - not in profile');
+      }
+      
+      // ========== 5. SELF-IDENTIFY NAME ==========
+      // Name field in voluntary self-identification section
+      const fullName = (data.firstName && data.lastName) ? `${data.firstName} ${data.lastName}` : null;
+      if (fullName) {
+        console.log('  🔵 Looking for self-identify name field...');
+        
+        // Look specifically in self-identification section
+        const selfIdSections = Array.from(document.querySelectorAll('[data-automation-id*="self" i], [data-automation-id*="identify" i], [class*="self-identify" i]'));
+        let nameInput = null;
+        
+        for (const section of selfIdSections) {
+          const inputs = section.querySelectorAll('input[type="text"], input:not([type])');
+          for (const input of inputs) {
+            const label = input.closest('label')?.textContent || 
+                         document.querySelector(`label[for="${input.id}"]`)?.textContent ||
+                         input.getAttribute('aria-label') || '';
+            if (label.toLowerCase().includes('name') && !label.toLowerCase().includes('employee')) {
+              nameInput = input;
+              break;
+            }
+          }
+        }
+        
+        // Also try generic approach
+        if (!nameInput) {
+          const nameQuestion = findQuestionInput(['name']);
+          // Be careful not to fill employee ID or other name fields
+          if (nameQuestion && !nameQuestion.labelText.includes('employee')) {
+            nameInput = nameQuestion.input;
+          }
+        }
+        
+        if (nameInput && nameInput.offsetParent !== null && !nameInput.disabled) {
+          const filled = await fillTextInputWithValidation(nameInput, fullName);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled self-identify name: ${fullName}`);
+          }
+        } else {
+          console.log('  ⚠️ Self-identify name field not found or already filled');
+        }
+      }
+      
+      // ========== 6. SELF-IDENTIFY DATE ==========
+      // Current date field in self-identification section
+      const today = new Date();
+      const currentDate = `${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}/${today.getFullYear()}`;
+      
+      console.log('  🔵 Looking for self-identify date field...');
+      
+      const dateQuestion = findQuestionInput(['date']);
+      if (dateQuestion && dateQuestion.labelText.includes('date') && !dateQuestion.labelText.includes('graduation') && !dateQuestion.labelText.includes('birth')) {
+        // Check if it's a date input that's not already filled
+        const dateInput = dateQuestion.input;
+        if (dateInput && (!dateInput.value || dateInput.value === 'MM/DD/YYYY')) {
+          const filled = await fillTextInputWithValidation(dateInput, currentDate);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled self-identify date: ${currentDate}`);
+          }
+        }
+      }
+      
+      // ========== 7. LEGAL AGE TO WORK ==========
+      // "Are you of legal age to work..." - Only fill if we have DOB or explicit flag
+      const isLegalAge = data.isLegalAgeToWork ?? data.legalAge;
+      if (isLegalAge !== undefined && isLegalAge !== null) {
+        console.log('  🔵 Looking for legal age question...');
+        
+        const legalAgeQuestion = findQuestionDropdown(['legal age', 'work']) ||
+                                  findQuestionDropdown(['18 years', 'older']);
+        
+        if (legalAgeQuestion) {
+          const optionToSelect = isLegalAge ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(legalAgeQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled legal age: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping legal age - not in profile');
+      }
+      
+      // ========== 8. BACKGROUND CHECK ==========
+      const willingBackgroundCheck = data.willingBackgroundCheck ?? data.backgroundCheck;
+      if (willingBackgroundCheck !== undefined && willingBackgroundCheck !== null) {
+        console.log('  🔵 Looking for background check question...');
+        
+        const bgCheckQuestion = findQuestionDropdown(['background check']);
+        
+        if (bgCheckQuestion) {
+          const optionToSelect = willingBackgroundCheck ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(bgCheckQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled background check: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping background check - not in profile');
+      }
+      
+      // ========== 9. CURRENTLY ENROLLED ==========
+      const currentlyEnrolled = data.currentlyEnrolled ?? (education?.years?.toLowerCase().includes('expected'));
+      if (currentlyEnrolled !== undefined && currentlyEnrolled !== null) {
+        console.log('  🔵 Looking for currently enrolled question...');
+        
+        const enrolledQuestion = findQuestionDropdown(['currently enrolled', 'full-time']) ||
+                                  findQuestionDropdown(['enrolled', 'degree program']);
+        
+        if (enrolledQuestion) {
+          const optionToSelect = currentlyEnrolled ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(enrolledQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled currently enrolled: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping currently enrolled - not in profile');
+      }
+      
+      // ========== 10. ABLE TO RELOCATE ==========
+      const willingToRelocate = data.willingToRelocate ?? data.relocate;
+      if (willingToRelocate !== undefined && willingToRelocate !== null) {
+        console.log('  🔵 Looking for relocate question...');
+        
+        const relocateQuestion = findQuestionDropdown(['relocate']) ||
+                                  findQuestionDropdown(['work on a daily basis', 'location']);
+        
+        if (relocateQuestion) {
+          const optionToSelect = willingToRelocate ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(relocateQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled relocate: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping relocate - not in profile');
+      }
+      
+      // ========== 11. AVAILABLE FOR INTERNSHIP ==========
+      const availableForInternship = data.availableForInternship ?? data.internshipAvailability;
+      if (availableForInternship !== undefined && availableForInternship !== null) {
+        console.log('  🔵 Looking for internship availability question...');
+        
+        const internshipQuestion = findQuestionDropdown(['12-week', 'internship']) ||
+                                    findQuestionDropdown(['available', 'internship']);
+        
+        if (internshipQuestion) {
+          const optionToSelect = availableForInternship ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(internshipQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled internship availability: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping internship availability - not in profile');
+      }
+      
+      // ========== 12. ABLE TO LIVE IN COUNTRY FOR INTERNSHIP ==========
+      const canLiveInCountry = data.canLiveInCountryForInternship ?? data.availableForInternship;
+      if (canLiveInCountry !== undefined && canLiveInCountry !== null) {
+        console.log('  🔵 Looking for live in country question...');
+        
+        const liveQuestion = findQuestionDropdown(['live in the country', 'internship']) ||
+                              findQuestionDropdown(['duration', 'internship']);
+        
+        if (liveQuestion) {
+          const optionToSelect = canLiveInCountry ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(liveQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled can live in country: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping live in country - not in profile');
+      }
+      
+      // ========== 13. COMPETING OFFERS ==========
+      const hasCompetingOffers = data.hasCompetingOffers ?? data.competingOffers;
+      if (hasCompetingOffers !== undefined && hasCompetingOffers !== null) {
+        console.log('  🔵 Looking for competing offers question...');
+        
+        const offersQuestion = findQuestionDropdown(['competing', 'offer', 'deadline']) ||
+                                findQuestionDropdown(['other', 'offers']);
+        
+        if (offersQuestion) {
+          const optionToSelect = hasCompetingOffers ? 'Yes' : 'No';
+          const filled = await selectDropdownOption(offersQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled competing offers: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping competing offers - not in profile');
+      }
+      
+      // ========== 14. GENDER (EEO) ==========
+      const gender = data.gender;
+      if (gender) {
+        console.log('  🔵 Looking for gender question...');
+        
+        const genderQuestion = findQuestionDropdown(['gender']) ||
+                                findQuestionDropdown(['select your gender']);
+        
+        if (genderQuestion) {
+          // Map common values to dropdown options
+          let optionToSelect = gender;
+          if (gender.toLowerCase() === 'm' || gender.toLowerCase() === 'male') optionToSelect = 'Male';
+          if (gender.toLowerCase() === 'f' || gender.toLowerCase() === 'female') optionToSelect = 'Female';
+          if (gender.toLowerCase() === 'other' || gender.toLowerCase() === 'non-binary') optionToSelect = 'Decline to Self-Identify';
+          
+          const filled = await selectDropdownOption(genderQuestion.dropdown, optionToSelect);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled gender: ${optionToSelect}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping gender - not in profile');
+      }
+      
+      // ========== 15. ETHNICITY (EEO) ==========
+      const ethnicity = data.ethnicity;
+      if (ethnicity) {
+        console.log('  🔵 Looking for ethnicity question...');
+        
+        const ethnicityQuestion = findQuestionDropdown(['ethnicity']) ||
+                                   findQuestionDropdown(['race']);
+        
+        if (ethnicityQuestion) {
+          const filled = await selectDropdownOption(ethnicityQuestion.dropdown, ethnicity);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled ethnicity: ${ethnicity}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping ethnicity - not in profile');
+      }
+      
+      // ========== 16. VETERAN STATUS (EEO) ==========
+      const veteranStatus = data.veteranStatus;
+      if (veteranStatus) {
+        console.log('  🔵 Looking for veteran status question...');
+        
+        const veteranQuestion = findQuestionDropdown(['veteran', 'status']) ||
+                                 findQuestionDropdown(['military', 'service']);
+        
+        if (veteranQuestion) {
+          const filled = await selectDropdownOption(veteranQuestion.dropdown, veteranStatus);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled veteran status: ${veteranStatus}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping veteran status - not in profile');
+      }
+      
+      // ========== 17. DISABILITY STATUS (EEO) ==========
+      const disabilityStatus = data.disabilityStatus;
+      if (disabilityStatus) {
+        console.log('  🔵 Looking for disability question...');
+        
+        const disabilityQuestion = findQuestionDropdown(['disability']) ||
+                                    findQuestionDropdown(['disabled']);
+        
+        if (disabilityQuestion) {
+          const filled = await selectDropdownOption(disabilityQuestion.dropdown, disabilityStatus);
+          if (filled) {
+            filledCount++;
+            console.log(`  ✅ Filled disability status: ${disabilityStatus}`);
+          }
+        }
+      } else {
+        console.log('  ⏭️ Skipping disability - not in profile');
+      }
+      
+      // ========== 18. TERMS & CONDITIONS CHECKBOX ==========
+      console.log('  🔵 Looking for terms & conditions checkbox...');
+      
+      const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+      for (const checkbox of checkboxes) {
+        const label = checkbox.closest('label')?.textContent || 
+                     document.querySelector(`label[for="${checkbox.id}"]`)?.textContent ||
+                     checkbox.getAttribute('aria-label') || '';
+        
+        if ((label.toLowerCase().includes('terms') || label.toLowerCase().includes('acknowledge') || label.toLowerCase().includes('confirm')) 
+            && checkbox.offsetParent !== null && !checkbox.checked && !checkbox.disabled) {
+          checkbox.click();
+          checkbox.checked = true;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          filledCount++;
+          console.log('  ✅ Checked terms & conditions checkbox');
+          break;
+        }
+      }
+      
+      // ========== FINAL RE-VALIDATION PASS ==========
+      // Re-trigger validation on all filled text inputs to ensure React recognizes the values
+      console.log('  🔵 Running final re-validation pass for custom question inputs...');
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Find all text inputs that might be custom questions
+      const allTextInputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type]), textarea'));
+      for (const input of allTextInputs) {
+        if (input.value && input.offsetParent !== null && !input.disabled) {
+          const value = input.value;
+          
+          // Check if this looks like a custom question field (not name, email, phone, etc.)
+          const label = input.closest('label')?.textContent || 
+                       document.querySelector(`label[for="${input.id}"]`)?.textContent ||
+                       input.getAttribute('aria-label') || '';
+          const labelLower = label.toLowerCase();
+          
+          // Only re-validate graduation date and major/minor fields
+          if (labelLower.includes('graduation') || labelLower.includes('major') || labelLower.includes('minor') || labelLower.includes('degree')) {
+            console.log(`    Re-validating: "${label.substring(0, 50)}..." with value "${value}"`);
+            
+            // Get native setter
+            const isTextarea = input.tagName.toUpperCase() === 'TEXTAREA';
+            const nativeInputValueSetter = isTextarea 
+              ? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+              : Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            
+            // Clear and re-enter the value (simulates user edit)
+            input.focus();
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Clear the field
+            input.select();
+            document.execCommand('delete', false, null);
+            
+            // Re-type the value
+            for (const char of value) {
+              document.execCommand('insertText', false, char);
+            }
+            
+            // If execCommand didn't work, use direct value set
+            if (input.value !== value) {
+              // Update React tracker first
+              const tracker = input._valueTracker;
+              if (tracker) {
+                tracker.setValue('');
+              }
+              
+              // Set native value
+              if (nativeInputValueSetter) {
+                nativeInputValueSetter.call(input, value);
+              }
+              input.value = value;
+              
+              // Dispatch input event to notify React
+              input.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: value
+              }));
+            }
+            
+            // Dispatch change event
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // Wait a bit
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Blur to trigger validation
+            input.blur();
+            input.dispatchEvent(new FocusEvent('blur', { bubbles: true, relatedTarget: null }));
+            input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+            
+            // Final change event after blur
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // Parent container events
+            const parentContainer = input.closest('[data-automation-id]');
+            if (parentContainer) {
+              parentContainer.dispatchEvent(new Event('change', { bubbles: true }));
+              parentContainer.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 30));
+          }
+        }
+      }
+      
+      // Click somewhere else to trigger global blur
+      document.body.click();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      console.log(`🔵 ========== FILL CUSTOM QUESTIONS END ==========`);
+      console.log(`  Total custom questions filled: ${filledCount}`);
+      return filledCount;
+      
+    } catch (error) {
+      console.error('❌ Error filling custom questions:', error);
       console.error('  Error stack:', error.stack);
       return filledCount;
     }
@@ -6208,6 +7194,77 @@ class WorkdayHandler {
           submitButton.dispatchEvent(clickEvent);
         }
       }
+      
+      // CRITICAL: Re-validate all date fields specifically
+      // Workday date fields have special structure that needs extra validation
+      console.log('🔵 Re-validating all date fields...');
+      const dateInputs = document.querySelectorAll(
+        'input[id*="dateSectionMonth" i], input[id*="dateSectionYear" i], ' +
+        'input[id*="firstYearAttended" i], input[id*="lastYearAttended" i], ' +
+        'input[id*="startDate" i], input[id*="endDate" i], ' +
+        'input[id*="from" i][id*="input" i], input[id*="to" i][id*="input" i]'
+      );
+      
+      dateInputs.forEach((input, index) => {
+        if (input.offsetParent === null) return; // Skip hidden
+        const currentValue = input.value;
+        if (!currentValue || currentValue.trim() === '') return; // Skip empty
+        
+        console.log(`  Re-validating date field ${index + 1}: ${input.id} = "${currentValue}"`);
+        
+        // Find parent containers
+        const inputId = input.id || '';
+        const dateSectionId = inputId.replace('-input', '');
+        const dateSection = document.getElementById(dateSectionId);
+        const displayDiv = document.getElementById(`${dateSectionId}-display`);
+        
+        let dateInputWrapper = null;
+        if (inputId.includes('-dateSectionMonth-')) {
+          dateInputWrapper = document.getElementById(inputId.replace('-dateSectionMonth-input', ''));
+        } else if (inputId.includes('-dateSectionYear-')) {
+          dateInputWrapper = document.getElementById(inputId.replace('-dateSectionYear-input', ''));
+        }
+        
+        // Quick validation pass (faster)
+        setTimeout(() => {
+          const nativeValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+          )?.set;
+          
+          if (displayDiv) displayDiv.click();
+          
+          input.focus();
+          input.select();
+          
+          if (nativeValueSetter) nativeValueSetter.call(input, currentValue);
+          if (input._valueTracker) input._valueTracker.setValue(currentValue);
+          
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent('keydown', {
+            bubbles: true, cancelable: true,
+            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
+          }));
+          
+          input.blur();
+          input.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+          document.body.click();
+          
+          if (dateSection) {
+            dateSection.dispatchEvent(new Event('change', { bubbles: true }));
+            dateSection.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+          }
+          if (dateInputWrapper) {
+            dateInputWrapper.dispatchEvent(new Event('change', { bubbles: true }));
+            dateInputWrapper.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+          }
+          
+          // Update display with original value (keep leading zeros)
+          if (displayDiv) {
+            displayDiv.textContent = currentValue;
+          }
+        }, index * 30); // Fast staggered validation
+      });
       
       // Also try to trigger validation on all filled fields one more time
       Object.values(this.fields).forEach(field => {
