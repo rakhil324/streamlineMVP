@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callLLM, generateCoverLetterPrompt } from '@/lib/llm';
 import { restorePII } from '@/lib/dataSanitization';
 import { generatePDF } from '@/lib/pdfGenerator';
+import { generateSimpleCoverLetterLatex } from '@/lib/coverLetterLatex';
+import { compileLatexToPdf, compileLatexAlternative } from '@/lib/latexCompiler';
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,19 +72,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate PDF
+    // Strip any introductory/commentary text that the LLM might have added
+    finalCoverLetter = stripLLMCommentary(finalCoverLetter);
+
+    // Generate PDF using LaTeX (preferred) or PDFKit (fallback)
     let pdfBuffer: Buffer;
+    let method: 'latex' | 'pdfkit' = 'latex';
+
     try {
-      console.log('Starting PDF generation for cover letter...');
+      console.log('Starting LaTeX PDF generation for cover letter...');
       console.log('Content length:', finalCoverLetter.length);
-      pdfBuffer = await generatePDF(finalCoverLetter, `cover-letter-${companyName}.pdf`);
-      
+
+      // Step 1: Generate LaTeX from the cover letter text
+      const latexContent = generateSimpleCoverLetterLatex(finalCoverLetter, companyName);
+      console.log('Generated LaTeX content, length:', latexContent.length);
+
+      // Step 2: Compile LaTeX to PDF
+      try {
+        pdfBuffer = await compileLatexToPdf(latexContent);
+        method = 'latex';
+        console.log('✅ LaTeX compilation successful:', pdfBuffer.length, 'bytes');
+      } catch (latexError1) {
+        console.log('Primary LaTeX API failed, trying alternative...');
+        try {
+          pdfBuffer = await compileLatexAlternative(latexContent);
+          method = 'latex';
+          console.log('✅ Alternative LaTeX compilation successful:', pdfBuffer.length, 'bytes');
+        } catch (latexError2) {
+          console.log('All LaTeX APIs failed, falling back to PDFKit...');
+          // Fallback to PDFKit
+          pdfBuffer = await generatePDF(finalCoverLetter, `cover-letter-${companyName}.pdf`);
+          method = 'pdfkit';
+          console.log('✅ PDFKit fallback successful:', pdfBuffer.length, 'bytes');
+        }
+      }
+
       if (!pdfBuffer || pdfBuffer.length === 0) {
         throw new Error('PDF buffer is empty');
       }
-      
-      console.log('PDF generated successfully, size:', pdfBuffer.length, 'bytes');
-      
+
+      console.log(`PDF generated successfully via ${method}:`, pdfBuffer.length, 'bytes');
+
       // Return PDF as base64
       const pdfBase64 = pdfBuffer.toString('base64');
 
@@ -91,13 +121,13 @@ export async function POST(request: NextRequest) {
         content: finalCoverLetter,
         pdf: pdfBase64,
         format: 'pdf',
+        method: method,
         usage: llmResponse.usage,
       });
     } catch (error: any) {
-      // If PDF generation fails, log the error and return text content
-      console.error('❌ PDF generation failed:', error);
+      // If all PDF generation fails, log the error and return text content
+      console.error('❌ All PDF generation methods failed:', error);
       console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
       console.error('Content preview (first 200 chars):', finalCoverLetter.substring(0, 200));
       return NextResponse.json({
         success: true,
@@ -113,5 +143,38 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Strips introductory/commentary text that LLMs often add
+ * Examples: "Here is a tailored cover letter for...", "Here's your cover letter:"
+ */
+function stripLLMCommentary(text: string): string {
+  // Common intro patterns to remove
+  const introPatterns = [
+    /^here(?:'s| is) (?:a |your |the )?(?:tailored )?cover letter[^:]*:\s*/i,
+    /^here(?:'s| is) (?:a |your |the )?(?:tailored )?letter[^:]*:\s*/i,
+    /^i(?:'ve| have) (?:written|created|prepared|drafted)[^:]*:\s*/i,
+    /^below is[^:]*:\s*/i,
+    /^the following is[^:]*:\s*/i,
+  ];
+
+  let cleaned = text.trim();
+
+  for (const pattern of introPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  // Also remove any trailing commentary
+  const outroPatterns = [
+    /\n\n(?:i hope this helps|let me know if|feel free to|good luck|best of luck)[^]*$/i,
+    /\n\n(?:note:|please note:)[^]*$/i,
+  ];
+
+  for (const pattern of outroPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  return cleaned.trim();
 }
 
