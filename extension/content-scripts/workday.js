@@ -771,7 +771,7 @@ class WorkdayHandler {
 
   /**
    * Fill Workday's autocomplete/typeahead fields (like Field of Study)
-   * Uses keyboard navigation (ArrowDown) to scroll through options and find exact match
+   * Directly finds and clicks on dropdown options for reliability
    */
   async fillWorkdayAutocomplete(element, value) {
     if (!element || !value) return false;
@@ -783,15 +783,14 @@ class WorkdayHandler {
       // Scroll into view first
       this.scrollIntoViewAndHighlight(element);
       
-      // Step 1: Focus and click the input to activate it
-      element.focus();
-      element.click();
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Step 2: Clear existing value
       const nativeValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype, 'value'
       )?.set;
+      
+      // Step 1: Clear the field and focus
+      element.focus();
+      element.click();
+      await new Promise(resolve => setTimeout(resolve, 150));
       
       if (nativeValueSetter) {
         nativeValueSetter.call(element, '');
@@ -801,20 +800,41 @@ class WorkdayHandler {
       element.dispatchEvent(new Event('input', { bubbles: true }));
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Step 3: Type the value to trigger autocomplete dropdown
-      console.log(`  📝 Typing "${value}"...`);
-      if (nativeValueSetter) {
-        nativeValueSetter.call(element, value);
-      } else {
-        element.value = value;
+      // Step 2: Type the value character by character to trigger autocomplete
+      console.log(`  📝 Typing "${value}" character by character...`);
+      for (let i = 0; i < value.length; i++) {
+        const char = value[i];
+        const currentValue = value.substring(0, i + 1);
+        
+        // Dispatch keydown
+        element.dispatchEvent(new KeyboardEvent('keydown', {
+          bubbles: true, cancelable: true,
+          key: char, code: `Key${char.toUpperCase()}`,
+          keyCode: char.charCodeAt(0), which: char.charCodeAt(0)
+        }));
+        
+        // Set value
+        if (nativeValueSetter) {
+          nativeValueSetter.call(element, currentValue);
+        } else {
+          element.value = currentValue;
+        }
+        
+        // Dispatch input event
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true, cancelable: true,
+          inputType: 'insertText', data: char
+        }));
+        
+        // Dispatch keyup
+        element.dispatchEvent(new KeyboardEvent('keyup', {
+          bubbles: true, cancelable: true,
+          key: char, code: `Key${char.toUpperCase()}`,
+          keyCode: char.charCodeAt(0), which: char.charCodeAt(0)
+        }));
+        
+        await new Promise(resolve => setTimeout(resolve, 30));
       }
-      
-      // Trigger input events
-      element.dispatchEvent(new InputEvent('input', {
-        bubbles: true, cancelable: true,
-        inputType: 'insertText', data: value
-      }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
       
       // Update React state
       if (element._valueTracker) {
@@ -822,163 +842,148 @@ class WorkdayHandler {
         element._valueTracker.setValue(value);
       }
       this.updateReactState(element, value);
+      element.dispatchEvent(new Event('change', { bubbles: true }));
       
-      // Step 4: Wait for dropdown to appear
-      console.log(`  ⏳ Waiting for dropdown...`);
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Step 3: Wait for dropdown to appear and populate
+      console.log(`  ⏳ Waiting for dropdown to populate...`);
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Step 5: Use KEYBOARD NAVIGATION to find the exact match
-      // This is the most reliable method - scroll through options with ArrowDown
-      console.log(`  🔽 Using keyboard navigation to find exact match "${value}"...`);
+      // Step 4: Find all dropdown options
+      console.log(`  🔍 Searching for dropdown options...`);
       
-      element.focus();
-      let found = false;
-      let bestMatchIndex = -1;
+      // Try multiple selectors for Workday dropdowns
+      const dropdownSelectors = [
+        '[role="listbox"] [role="option"]',
+        '[data-automation-id="promptOption"]',
+        '[class*="promptOption"]',
+        '[role="option"]',
+        'li[role="option"]',
+        '[class*="menu"] [class*="option"]',
+        '[class*="dropdown"] li',
+        '[class*="autocomplete"] li'
+      ];
+      
+      let allOptions = [];
+      for (const selector of dropdownSelectors) {
+        const options = document.querySelectorAll(selector);
+        if (options.length > 0) {
+          console.log(`    Found ${options.length} options with selector: ${selector}`);
+          allOptions = Array.from(options).filter(opt => {
+            const style = window.getComputedStyle(opt);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+          });
+          if (allOptions.length > 0) break;
+        }
+      }
+      
+      console.log(`  📊 Total visible options found: ${allOptions.length}`);
+      
+      if (allOptions.length === 0) {
+        // No dropdown appeared, just leave the typed value
+        console.log(`  ⚠️ No dropdown options found, keeping typed value`);
+        element.blur();
+        return value.length > 0;
+      }
+      
+      // Log first few options for debugging
+      const optionTexts = allOptions.slice(0, 10).map(opt => 
+        (opt.innerText || opt.textContent || '').trim()
+      );
+      console.log(`  📋 First options: ${optionTexts.join(', ')}`);
+      
+      // Step 5: Find the best matching option
+      let exactMatch = null;
+      let bestMatch = null;
       let bestMatchScore = -1;
-      let bestMatchText = '';
-      const maxOptions = 30; // Maximum options to check
-      const seenOptions = [];
       
-      // Helper to get currently highlighted option text
-      const getHighlightedText = () => {
-        // Try to read the input value (Workday updates it as you navigate)
-        const inputValue = element.value || '';
+      for (const option of allOptions) {
+        const optionText = (option.innerText || option.textContent || '').trim();
+        const optionTextLower = optionText.toLowerCase();
         
-        // Also look for highlighted option element
-        const highlighted = document.querySelector(
-          '[role="option"][aria-selected="true"], ' +
-          '[data-automation-id*="promptOption"][aria-selected="true"], ' +
-          '[role="option"]:focus, ' +
-          'li[aria-selected="true"], ' +
-          '[class*="css"][aria-selected="true"]'
-        );
-        
-        if (highlighted) {
-          const text = (highlighted.innerText || highlighted.textContent || '').trim();
-          return text;
-        }
-        
-        return inputValue;
-      };
-      
-      // Navigate through options
-      for (let i = 0; i < maxOptions; i++) {
-        // Press ArrowDown
-        element.dispatchEvent(new KeyboardEvent('keydown', {
-          bubbles: true, cancelable: true,
-          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
-        }));
-        element.dispatchEvent(new KeyboardEvent('keyup', {
-          bubbles: true, cancelable: true,
-          key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
-        }));
-        
-        await new Promise(resolve => setTimeout(resolve, 150));
-        
-        // Get the current option text
-        const currentText = getHighlightedText();
-        const currentTextLower = currentText.toLowerCase().trim();
-        
-        console.log(`    Option ${i + 1}: "${currentText}"`);
-        
-        // Check if we've seen this option before (means we've looped)
-        if (seenOptions.includes(currentTextLower)) {
-          console.log(`  ↩️ Looped back to beginning, stopping navigation`);
-          break;
-        }
-        seenOptions.push(currentTextLower);
-        
-        // Check for EXACT match
-        if (currentTextLower === valueLower) {
-          console.log(`  🎯 EXACT MATCH FOUND at position ${i + 1}!`);
-          found = true;
-          
-          // Press Enter to select this option
-          element.dispatchEvent(new KeyboardEvent('keydown', {
-            bubbles: true, cancelable: true,
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
-          }));
-          element.dispatchEvent(new KeyboardEvent('keyup', {
-            bubbles: true, cancelable: true,
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
-          }));
-          
-          await new Promise(resolve => setTimeout(resolve, 200));
+        // Check for exact match (case-insensitive)
+        if (optionTextLower === valueLower) {
+          exactMatch = option;
+          console.log(`  🎯 EXACT MATCH FOUND: "${optionText}"`);
           break;
         }
         
-        // Track best match (shortest option that contains our value, or starts with it)
-        if (currentTextLower.includes(valueLower) || valueLower.includes(currentTextLower) ||
-            currentTextLower.startsWith(valueLower.substring(0, 3))) {
-          // Score: exact length match > starts with > contains > shorter is better
-          const isStartsWith = currentTextLower.startsWith(valueLower);
-          const currentScore = isStartsWith ? 1000 - currentText.length : 500 - currentText.length;
-          
-          if (bestMatchIndex === -1 || currentScore > bestMatchScore) {
-            bestMatchIndex = i;
-            bestMatchScore = currentScore;
-            bestMatchText = currentText;
-          }
+        // Score partial matches
+        let score = 0;
+        if (optionTextLower.startsWith(valueLower)) {
+          // Option starts with our value - high score, prefer shorter
+          score = 1000 - optionText.length;
+        } else if (optionTextLower.includes(valueLower)) {
+          // Option contains our value
+          score = 500 - optionText.length;
+        } else if (valueLower.includes(optionTextLower)) {
+          // Our value contains the option
+          score = 300 - optionText.length;
         }
-      }
-      
-      // If no exact match found, fallback to best match
-      if (!found) {
-        console.log(`  ⚠️ No exact match found after checking ${seenOptions.length} options`);
-        console.log(`  📋 Options seen: ${seenOptions.slice(0, 5).join(', ')}${seenOptions.length > 5 ? '...' : ''}`);
         
-        if (bestMatchIndex >= 0 && seenOptions.length > 0) {
-          console.log(`  🔄 Falling back to best match: "${bestMatchText}" at position ${bestMatchIndex + 1}`);
-          
-          // Navigate back to the best match
-          // First, press Escape to reset, then re-open and navigate
-          element.dispatchEvent(new KeyboardEvent('keydown', {
-            bubbles: true, cancelable: true,
-            key: 'Escape', code: 'Escape', keyCode: 27, which: 27
-          }));
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Re-focus and trigger dropdown
-          element.focus();
-          element.click();
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // Navigate to the best match position
-          for (let j = 0; j <= bestMatchIndex; j++) {
-            element.dispatchEvent(new KeyboardEvent('keydown', {
-              bubbles: true, cancelable: true,
-              key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
-            }));
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          
-          // Select it
-          console.log(`  ✅ Selecting fallback option: "${bestMatchText}"`);
-          element.dispatchEvent(new KeyboardEvent('keydown', {
-            bubbles: true, cancelable: true,
-            key: 'Enter', code: 'Enter', keyCode: 13, which: 13
-          }));
-          await new Promise(resolve => setTimeout(resolve, 200));
-          found = true;
-        } else {
-          // No options at all - just leave the typed value
-          console.log(`  ⚠️ No matching options found, keeping typed value`);
-          element.dispatchEvent(new KeyboardEvent('keydown', {
-            bubbles: true, cancelable: true,
-            key: 'Escape', code: 'Escape', keyCode: 27, which: 27
-          }));
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (score > bestMatchScore) {
+          bestMatchScore = score;
+          bestMatch = option;
         }
       }
       
-      // Step 6: Blur to close dropdown
+      // Step 6: Click on the best option
+      const optionToClick = exactMatch || bestMatch;
+      
+      if (optionToClick) {
+        const optionText = (optionToClick.innerText || optionToClick.textContent || '').trim();
+        console.log(`  ✅ Clicking on option: "${optionText}"`);
+        
+        // Scroll option into view if needed
+        optionToClick.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Try multiple click methods
+        optionToClick.click();
+        
+        // Also dispatch mouse events for React
+        optionToClick.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        optionToClick.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        optionToClick.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Verify the value was set
+        const finalValue = element.value || '';
+        console.log(`  📋 Value after click: "${finalValue}"`);
+        
+        if (finalValue.length > 0) {
+          this.showFieldFilled(element);
+          return true;
+        }
+      } else {
+        console.log(`  ⚠️ No matching option found in dropdown`);
+      }
+      
+      // Step 7: Fallback - if click didn't work, try Tab/Enter
+      console.log(`  🔄 Trying keyboard selection fallback...`);
+      element.focus();
+      
+      // Press ArrowDown to select first option
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true,
+        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40
+      }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Press Tab to select
+      element.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true,
+        key: 'Tab', code: 'Tab', keyCode: 9, which: 9
+      }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       element.blur();
       element.dispatchEvent(new Event('change', { bubbles: true }));
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
       const finalValue = element.value || '';
-      console.log(`  Workday Autocomplete result: "${finalValue}"`);
+      console.log(`  Workday Autocomplete final result: "${finalValue}"`);
       
       if (finalValue.length > 0) {
         this.showFieldFilled(element);
