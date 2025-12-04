@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { Sparkles, FileText, MessageSquare, Zap, Loader2, CheckCircle, Download, X, Play, RotateCcw, Search, Building2, Upload, AlertCircle } from 'lucide-react';
+import { Sparkles, FileText, MessageSquare, Zap, Loader2, CheckCircle, Download, X, Play, RotateCcw, Search, Building2, Upload, AlertCircle, Copy } from 'lucide-react';
 import { mockJobs, Job } from '@/lib/mockData';
 
 export default function AIToolsPage() {
@@ -52,6 +52,8 @@ export default function AIToolsPage() {
     interviewQuestions?: InterviewQuestion[];
     selectedJobId?: string;
     pdfBase64?: string;
+    tailoredData?: any;
+    originalData?: any;
   }>({});
 
   const tools = [
@@ -335,23 +337,15 @@ export default function AIToolsPage() {
         }
 
         const data = await response.json();
-      setGenerating(null);
-      setCurrentStep(0);
+        setGenerating(null);
+        setCurrentStep(0);
         
-        // Log for debugging
-        console.log('Resume API response:', { 
-          hasContent: !!data.content, 
-          hasPdf: !!data.pdf, 
-          pdfLength: data.pdf?.length || 0,
-          format: data.format,
-          error: data.error,
-          fullResponse: data
-        });
+        console.log('Resume API response:', data);
         
         setGeneratedContent(prev => ({ 
           ...prev, 
           resume: data.content,
-          pdfBase64: data.pdf || undefined,
+          pdfBase64: data.pdf,
           selectedJobId: job.id 
         }));
       } else if (toolId === 'cover' && job && fileData) {
@@ -726,6 +720,20 @@ export default function AIToolsPage() {
           </div>
         )}
 
+        {/* Global Error Message - Shows prominently */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="ml-auto p-1 hover:bg-red-100 rounded"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Tool Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {tools.map((tool) => (
@@ -829,25 +837,16 @@ export default function AIToolsPage() {
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    if (!generatedContent.pdfBase64) {
-                      setError('PDF generation failed. The file will download as text. Check server logs for details.');
-                      downloadPDF(
-                        generatedContent.resume!,
-                        `resume-${selectedJob?.company || 'resume'}.pdf`,
-                        generatedContent.pdfBase64
-                      );
-                    } else {
-                      downloadPDF(
-                        generatedContent.resume!,
-                        `resume-${selectedJob?.company || 'resume'}.pdf`,
-                        generatedContent.pdfBase64
-                      );
-                    }
+                    downloadPDF(
+                      generatedContent.resume!,
+                      `resume-${selectedJob?.company || 'tailored'}.pdf`,
+                      generatedContent.pdfBase64
+                    );
                   }}
                   className="flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  {generatedContent.pdfBase64 ? 'Download PDF' : 'Download Text (PDF Failed)'}
+                  {generatedContent.pdfBase64 ? 'Download PDF' : 'Download Text'}
                 </Button>
                 <button
                   onClick={() => setActiveTool(null)}
@@ -857,7 +856,7 @@ export default function AIToolsPage() {
                 </button>
               </div>
             </div>
-            <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+            <div className="bg-gray-50 rounded-lg p-6 border border-gray-200 max-h-[600px] overflow-y-auto">
               <pre className="whitespace-pre-wrap font-mono text-sm text-textPrimary">
                 {generatedContent.resume}
               </pre>

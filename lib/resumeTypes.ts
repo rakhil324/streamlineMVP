@@ -32,7 +32,9 @@ export type ExtracurricularItem = {
 };
 
 export type SkillsAndInterests = {
-  skills: string;
+  skills: string;        // Languages
+  frameworks?: string;   // Frameworks & Libraries
+  tools?: string;        // Tools
   interests: string;
   otherInvolvements?: string;
 };
