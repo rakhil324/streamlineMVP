@@ -34,18 +34,29 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform to expected format
-    const jobs = applications.map(app => ({
-      id: app.id,
-      title: app.jobTitle,
-      company: app.company,
-      location: app.location || '',
-      type: app.jobType || 'Full-time',
-      status: app.status,
-      appliedDate: app.appliedDate.toISOString().split('T')[0],
-      description: '',
-      jobUrl: app.jobUrl || '',
-      deadline: app.deadline || undefined,
-    }));
+    const jobs = applications.map(app => {
+      // Parse metadata to get description
+      let description = '';
+      if (app.metadata) {
+        try {
+          const metadata = JSON.parse(app.metadata);
+          description = metadata.description || '';
+        } catch (e) {}
+      }
+      
+      return {
+        id: app.id,
+        title: app.jobTitle,
+        company: app.company,
+        location: app.location || '',
+        type: app.jobType || 'Full-time',
+        status: app.status,
+        appliedDate: app.appliedDate.toISOString().split('T')[0],
+        description: description,
+        jobUrl: app.jobUrl || '',
+        deadline: app.deadline || undefined,
+      };
+    });
 
     const response = NextResponse.json({ jobs });
     response.headers.set('Access-Control-Allow-Origin', '*');
@@ -97,6 +108,14 @@ export async function POST(request: NextRequest) {
 
     if (existingApplication) {
       console.log('Job already exists, returning existing job');
+      // Parse metadata to get description
+      let existingDescription = '';
+      if (existingApplication.metadata) {
+        try {
+          const metadata = JSON.parse(existingApplication.metadata);
+          existingDescription = metadata.description || '';
+        } catch (e) {}
+      }
       const response = NextResponse.json({ 
         job: {
           id: existingApplication.id,
@@ -105,6 +124,8 @@ export async function POST(request: NextRequest) {
           location: existingApplication.location || '',
           status: existingApplication.status,
           appliedDate: existingApplication.appliedDate.toISOString().split('T')[0],
+          description: existingDescription,
+          jobUrl: existingApplication.jobUrl || '',
         },
         message: 'Job already exists'
       });
@@ -112,7 +133,9 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    // Create new application in database
+    // Create new application in database with description in metadata
+    const metadata = description ? JSON.stringify({ description: description.substring(0, 2000) }) : null;
+    
     const application = await prisma.application.create({
       data: {
         userId: session.user.id,
@@ -122,9 +145,19 @@ export async function POST(request: NextRequest) {
         jobUrl: jobUrl || '',
         status: 'Applied',
         platform: 'Extension',
+        metadata: metadata,
       },
     });
 
+    // Parse metadata to get description back
+    let savedDescription = '';
+    if (application.metadata) {
+      try {
+        const parsedMetadata = JSON.parse(application.metadata);
+        savedDescription = parsedMetadata.description || '';
+      } catch (e) {}
+    }
+    
     const job = {
       id: application.id,
       title: application.jobTitle,
@@ -133,6 +166,7 @@ export async function POST(request: NextRequest) {
       status: application.status,
       appliedDate: application.appliedDate.toISOString().split('T')[0],
       jobUrl: application.jobUrl || '',
+      description: savedDescription,
     };
 
     console.log(`Job saved to tracker: ${title} at ${company}`);

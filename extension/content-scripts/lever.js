@@ -147,11 +147,158 @@ class LeverHandler {
         },
       });
 
+      // Save job to application tracker
+      await this.saveJobToTracker();
+
     } catch (error) {
       console.error('Lever autofill error:', error);
     } finally {
       this.isAutofilling = false;
     }
+  }
+
+  extractJobInfo() {
+    let jobTitle = '';
+    let companyName = '';
+    let jobDescription = '';
+    let location = '';
+
+    // Try to find job title - common selectors on Lever pages
+    const titleSelectors = [
+      'h1.posting-headline',
+      'h1',
+      '.posting-headline h2',
+      '[data-qa="posting-title"]',
+    ];
+
+    for (const selector of titleSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        const text = element.textContent.trim();
+        if (text.length < 100 && !text.includes('Apply')) {
+          jobTitle = text;
+          break;
+        }
+      }
+    }
+
+    // Try to find company name from URL or page
+    const hostname = window.location.hostname;
+    const leverMatch = hostname.match(/jobs\.lever\.co\/([^\/]+)/);
+    if (leverMatch) {
+      companyName = leverMatch[1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    // Also check for company name in meta or page elements
+    const companySelectors = [
+      '.company-name',
+      '[data-qa="company-name"]',
+      'meta[property="og:site_name"]',
+    ];
+
+    for (const selector of companySelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const text = element.getAttribute('content') || element.textContent || '';
+        if (text.trim()) {
+          companyName = text.trim();
+          break;
+        }
+      }
+    }
+
+    // Try to find location
+    const locationSelectors = [
+      '.location',
+      '[data-qa="posting-location"]',
+      '.posting-categories .location',
+    ];
+
+    for (const selector of locationSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        location = element.textContent.trim();
+        break;
+      }
+    }
+
+    // Try to find job description
+    const descriptionSelectors = [
+      '.posting-page .content',
+      '.posting-description',
+      '[data-qa="posting-description"]',
+    ];
+
+    for (const selector of descriptionSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.textContent) {
+        jobDescription = element.textContent.trim().substring(0, 2000);
+        break;
+      }
+    }
+
+    console.log('Lever: Extracted job info', { jobTitle, companyName, location });
+
+    return { jobTitle, companyName, location, jobDescription };
+  }
+
+  async saveJobToTracker() {
+    try {
+      const jobInfo = this.extractJobInfo();
+
+      if (!jobInfo.jobTitle || !jobInfo.companyName) {
+        console.log('Lever: Not enough job info to save to tracker');
+        return;
+      }
+
+      console.log('Lever: Saving job to application tracker...');
+      const saveResponse = await chrome.runtime.sendMessage({
+        type: 'saveJob',
+        jobInfo: {
+          title: jobInfo.jobTitle,
+          company: jobInfo.companyName,
+          location: jobInfo.location || '',
+          description: jobInfo.jobDescription || '',
+          jobUrl: window.location.href,
+        },
+      });
+
+      if (saveResponse && saveResponse.success) {
+        console.log('Lever: Job saved to tracker successfully');
+        this.showNotification('Application tracked!', 'success');
+      } else {
+        console.warn('Lever: Failed to save job to tracker:', saveResponse?.error);
+      }
+    } catch (error) {
+      console.warn('Lever: Error saving job to tracker:', error);
+    }
+  }
+
+  showNotification(message, type = 'info') {
+    const existing = document.getElementById('lever-autofill-notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.id = 'lever-autofill-notification';
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 10000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      max-width: 400px;
+    `;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => notification.remove(), 4000);
   }
 
   fillField(element, value) {

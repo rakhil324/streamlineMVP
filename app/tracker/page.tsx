@@ -26,11 +26,9 @@ export default function TrackerPage() {
           return;
         }
         const data = await response.json();
-        if (data.success) {
-          // Only show jobs with "Applied" status
-          const appliedJobs = (data.jobs || []).filter((job: Job) => job.status === 'Applied');
-          setJobs(appliedJobs);
-        }
+        // Filter to only show jobs with "Applied" status
+        const appliedJobs = (data.jobs || []).filter((job: Job) => job.status === 'Applied');
+        setJobs(appliedJobs);
       } catch (err) {
         console.error('Error fetching jobs:', err);
         setError('Failed to load jobs');

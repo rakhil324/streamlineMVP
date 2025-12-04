@@ -66,17 +66,13 @@ class WorkdayHandler {
           console.log('✅ Got autofill data from storage, starting autofill...');
           // Run autofill
           const fillResult = await this.autofill(autofillData);
-          console.log('Autofill function returned with result:', fillResult);
-          
-          // Wait longer to ensure all async operations, React updates, and field validations complete
-          // This includes any delayed dropdown selections, form validations, etc.
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('Autofill completed with result:', fillResult);
           
           // Store result
           await chrome.storage.local.set({
             [`autofill_result_${storageKey}`]: fillResult || { success: true, filledCount: 0 }
           });
-          console.log('✅ Autofill result stored - autofill is truly complete');
+          console.log('Autofill result stored');
         } else {
           console.warn('⚠️ No autofill data found in storage for key:', storageKey);
         }
@@ -107,15 +103,11 @@ class WorkdayHandler {
                 console.log('Executing autofill...');
                 
                 const fillResult = await this.autofill(autofillData);
-                console.log('Autofill function returned with result:', fillResult);
-                
-                // Wait longer to ensure all async operations, React updates, and field validations complete
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('Autofill result:', fillResult);
                 
                 await chrome.storage.local.set({
                   [`autofill_result_${activeKey}`]: fillResult || { success: true, filledCount: 0 }
                 });
-                console.log('✅ Autofill result stored - autofill is truly complete');
                 
                 // Clear active flag
                 await chrome.storage.local.remove([key]);
@@ -218,36 +210,6 @@ class WorkdayHandler {
           'select[id*="address" i][id*="state" i]',
           'input[name*="address" i][name*="state" i]',
           'select[name*="address" i][name*="state" i]',
-        ]),
-        street: this.findField([
-          'input[data-automation-id*="addressLine1" i]',
-          'input[data-automation-id*="address-line-1" i]',
-          'input[data-automation-id*="streetAddress" i]',
-          'input[data-automation-id*="street" i]',
-          'input[name*="addressLine1" i]',
-          'input[name*="address-line-1" i]',
-          'input[name*="streetAddress" i]',
-          'input[name*="street" i]',
-          'input[id*="addressLine1" i]',
-          'input[id*="address-line-1" i]',
-          'input[id*="streetAddress" i]',
-          'input[id*="street" i]',
-          'input[aria-label*="address line 1" i]',
-          'input[aria-label*="street" i]',
-          'input[placeholder*="street" i]',
-          'input[placeholder*="address line 1" i]',
-        ]),
-        zip: this.findField([
-          'input[data-automation-id*="postalCode" i]',
-          'input[data-automation-id*="zip" i]',
-          'input[name*="postalCode" i]',
-          'input[name*="zip" i]',
-          'input[id*="postalCode" i]',
-          'input[id*="zip" i]',
-          'input[aria-label*="postal" i]',
-          'input[aria-label*="zip" i]',
-          'input[placeholder*="zip" i]',
-          'input[placeholder*="postal" i]',
         ]),
         resume: this.findField([
           'input[type="file"][accept*="pdf"]',
@@ -1025,7 +987,7 @@ class WorkdayHandler {
         console.log('No fields detected, re-detecting...');
         this.detectFields();
         // Wait for fields to be detected
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       let filledCount = 0;
@@ -1101,72 +1063,6 @@ class WorkdayHandler {
           if (filled) {
             filledCount++;
             console.log('✅ Filled phone (found dynamically):', formattedPhone);
-          }
-        }
-      }
-      
-      // Fill street address
-      const streetAddress = data.street || data.address?.street || '';
-      if (streetAddress) {
-        console.log(`🔵 Attempting to fill street address with value: "${streetAddress}"`);
-        if (this.fields.street) {
-          const filled = await this.fillField(this.fields.street.element, streetAddress);
-          if (filled) {
-            filledCount++;
-            console.log('✅ Filled street address:', streetAddress);
-          }
-        } else {
-          // Try to find street field dynamically
-          const streetField = this.findField([
-            'input[data-automation-id*="addressLine1" i]',
-            'input[data-automation-id*="street" i]',
-            'input[name*="addressLine1" i]',
-            'input[name*="street" i]',
-            'input[id*="addressLine1" i]',
-            'input[id*="street" i]',
-            'input[aria-label*="address line 1" i]',
-            'input[aria-label*="street" i]',
-          ]);
-          if (streetField) {
-            const filled = await this.fillField(streetField.element, streetAddress);
-            if (filled) {
-              filledCount++;
-              console.log('✅ Filled street address (found dynamically):', streetAddress);
-            }
-          } else {
-            console.warn('⚠️ Street address field not found');
-          }
-        }
-      }
-      
-      // Fill zip/postal code
-      const zipCode = data.zip || data.address?.zip || '';
-      if (zipCode) {
-        console.log(`🔵 Attempting to fill zip code with value: "${zipCode}"`);
-        if (this.fields.zip) {
-          const filled = await this.fillField(this.fields.zip.element, zipCode);
-          if (filled) {
-            filledCount++;
-            console.log('✅ Filled zip code:', zipCode);
-          }
-        } else {
-          // Try to find zip field dynamically
-          const zipField = this.findField([
-            'input[data-automation-id*="postalCode" i]',
-            'input[data-automation-id*="zip" i]',
-            'input[name*="postalCode" i]',
-            'input[name*="zip" i]',
-            'input[id*="postalCode" i]',
-            'input[id*="zip" i]',
-          ]);
-          if (zipField) {
-            const filled = await this.fillField(zipField.element, zipCode);
-            if (filled) {
-              filledCount++;
-              console.log('✅ Filled zip code (found dynamically):', zipCode);
-            }
-          } else {
-            console.warn('⚠️ Zip code field not found');
           }
         }
       }
@@ -1279,10 +1175,8 @@ class WorkdayHandler {
         }
         
         // Fill State field if available (prioritize select/dropdown)
-        // Prefer direct state value from data, then parse from location
-        const stateValue = data.state || data.address?.state || state || '';
-        if (stateValue) {
-          console.log(`🔵 Attempting to fill state with value: "${stateValue}"`);
+        if (state) {
+          console.log(`🔵 Attempting to fill state with value: "${state}"`);
           // First check if we have a detected state field
           if (this.fields.state) {
             console.log(`  State field type: ${this.fields.state.element.tagName}`);
@@ -1291,22 +1185,29 @@ class WorkdayHandler {
             // If it's a SELECT, use fillSelectDropdown
             if (stateElement.tagName === 'SELECT') {
               console.log('  State field is a SELECT element, using fillSelectDropdown');
-              const filled = await this.fillSelectDropdown(stateElement, stateValue);
+              const filled = await this.fillSelectDropdown(stateElement, state);
               if (filled) {
                 filledCount++;
-                console.log('✅ Filled state via select dropdown:', stateValue);
+                console.log('✅ Filled state via select dropdown:', state);
               } else {
                 console.warn('⚠️ Failed to fill state select dropdown');
               }
             } else {
-              // For Workday state fields (usually INPUT with dropdown), use fillCustomDropdown (the working method)
-              console.log('  State field is INPUT, using fillCustomDropdown (proven working method)...');
-              const customFilled = await this.fillCustomDropdown(stateElement, stateValue);
-              if (customFilled) {
+              // Try regular fill first
+              const filled = await this.fillField(stateElement, state);
+              if (filled) {
                 filledCount++;
-                console.log('✅ Filled state via custom dropdown:', stateValue);
+                console.log('✅ Filled state:', state);
               } else {
-                console.warn('⚠️ Failed to fill state via custom dropdown');
+                // If standard fillField didn't work, try custom dropdown approach
+                console.log('  Standard fillField failed, trying custom dropdown approach...');
+                const customFilled = await this.fillCustomDropdown(stateElement, state);
+                if (customFilled) {
+                  filledCount++;
+                  console.log('✅ Filled state via custom dropdown:', state);
+                } else {
+                  console.warn('⚠️ All state fill methods failed');
+                }
               }
             }
           } else {
@@ -1333,22 +1234,29 @@ class WorkdayHandler {
               // If it's a SELECT, use fillSelectDropdown
               if (stateElement.tagName === 'SELECT') {
                 console.log('  State field is a SELECT element, using fillSelectDropdown');
-                const filled = await this.fillSelectDropdown(stateElement, stateValue);
+                const filled = await this.fillSelectDropdown(stateElement, state);
                 if (filled) {
                   filledCount++;
-                  console.log('✅ Filled state via select dropdown:', stateValue);
+                  console.log('✅ Filled state via select dropdown:', state);
                 } else {
                   console.warn('⚠️ Failed to fill state select dropdown');
                 }
               } else {
-                // For Workday state fields (usually INPUT with dropdown), use fillCustomDropdown (the working method)
-                console.log('  State field is INPUT, using fillCustomDropdown (proven working method)...');
-                const customFilled = await this.fillCustomDropdown(stateElement, stateValue);
-                if (customFilled) {
+                // Try regular fill first
+                const filled = await this.fillField(stateElement, state);
+                if (filled) {
                   filledCount++;
-                  console.log('✅ Filled state via custom dropdown:', stateValue);
+                  console.log('✅ Filled state:', state);
                 } else {
-                  console.warn('⚠️ Failed to fill state via custom dropdown');
+                  // Try custom dropdown approach
+                  console.log('  Standard fillField failed, trying custom dropdown approach...');
+                  const customFilled = await this.fillCustomDropdown(stateElement, state);
+                  if (customFilled) {
+                    filledCount++;
+                    console.log('✅ Filled state via custom dropdown:', state);
+                  } else {
+                    console.warn('⚠️ All state fill methods failed');
+                  }
                 }
               }
             } else {
@@ -1440,21 +1348,29 @@ class WorkdayHandler {
                           
                           // If it's a SELECT, use fillSelectDropdown
                           if (stateElement.tagName === 'SELECT') {
-                            const filled = await this.fillSelectDropdown(stateElement, stateValue);
+                            const filled = await this.fillSelectDropdown(stateElement, state);
                             if (filled) {
                               filledCount++;
-                              console.log('✅ Filled state via select dropdown (found near city):', stateValue);
+                              console.log('✅ Filled state via select dropdown (found near city):', state);
                               stateFieldFound = true;
                               break;
                             }
                           } else {
-                            // For INPUT elements, use fillCustomDropdown directly (the working method)
-                            const customFilled = await this.fillCustomDropdown(stateElement, stateValue);
-                            if (customFilled) {
+                            const filled = await this.fillField(stateElement, state);
+                            if (filled) {
                               filledCount++;
-                              console.log('✅ Filled state via custom dropdown (found near city):', stateValue);
+                              console.log('✅ Filled state (found near city):', state);
                               stateFieldFound = true;
                               break;
+                            } else {
+                              // Try custom dropdown approach
+                              const customFilled = await this.fillCustomDropdown(stateElement, state);
+                              if (customFilled) {
+                                filledCount++;
+                                console.log('✅ Filled state via custom dropdown (found near city):', state);
+                                stateFieldFound = true;
+                                break;
+                              }
                             }
                           }
                         }
@@ -1499,21 +1415,28 @@ class WorkdayHandler {
                             console.log(`✅ Found potential State field (dropdown after city): ${nextField.tagName} id="${fieldId}"`);
                             // If it's a SELECT, use fillSelectDropdown
                             if (nextField.tagName === 'SELECT') {
-                              const filled = await this.fillSelectDropdown(nextField, stateValue);
+                              const filled = await this.fillSelectDropdown(nextField, state);
                               if (filled) {
                                 filledCount++;
-                                console.log('✅ Filled state via select dropdown (dropdown after city):', stateValue);
+                                console.log('✅ Filled state via select dropdown (dropdown after city):', state);
                                 stateFieldFound = true;
                                 break;
                               }
                             } else {
-                              // For INPUT elements, use fillCustomDropdown directly (the working method)
-                              const customFilled = await this.fillCustomDropdown(nextField, stateValue);
-                              if (customFilled) {
+                              const filled = await this.fillField(nextField, state);
+                              if (filled) {
                                 filledCount++;
-                                console.log('✅ Filled state via custom dropdown (dropdown after city):', stateValue);
+                                console.log('✅ Filled state (dropdown after city):', state);
                                 stateFieldFound = true;
                                 break;
+                              } else {
+                                const customFilled = await this.fillCustomDropdown(nextField, state);
+                                if (customFilled) {
+                                  filledCount++;
+                                  console.log('✅ Filled state via custom dropdown (dropdown after city):', state);
+                                  stateFieldFound = true;
+                                  break;
+                                }
                               }
                             }
                           }
@@ -1699,7 +1622,7 @@ class WorkdayHandler {
       }
 
       // Final validation trigger - click outside or trigger form validation
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // CRITICAL: One final pass to update React state for all fields
       console.log('🔵 Final React state update pass...');
@@ -1731,13 +1654,27 @@ class WorkdayHandler {
         }
       });
       
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       // Try to find and trigger Workday's validation
       this.triggerWorkdayValidation();
       
       // Wait one more time for validation to complete
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      console.log(`✅ Autofill complete. Filled ${filledCount} fields.`);
+      
+      // Final debug: Check all field values
+      console.log('🔵 Final field values check:');
+      Object.keys(this.fields).forEach(key => {
+        const field = this.fields[key];
+        if (field && field.element) {
+          const value = field.element.value || '';
+          const expected = data[key] || '';
+          const match = value === expected || (value.length > 0 && expected.length > 0);
+          console.log(`  ${match ? '✅' : '❌'} ${key}: "${value}" ${match ? '' : `(expected: "${expected}")`}`);
+        }
+      });
       
       // Check for any required fields that might be empty and try to fill them
       console.log('🔵 Checking for required empty fields...');
@@ -1791,10 +1728,8 @@ class WorkdayHandler {
           }
           // State field
           else if (searchText.includes('state') && !searchText.includes('address')) {
-            // Use stateValue if available, otherwise extract from location
-            if (stateValue) {
-              valueToFill = stateValue;
-            } else if (data.location) {
+            // Extract state from location (e.g., "Ashburn, VA, USA" -> "VA" or "Ashburn, Virginia" -> "Virginia")
+            if (data.location) {
               const parts = data.location.split(',').map(p => p.trim());
               if (parts.length >= 2) {
                 // State is usually the second part (could be "VA" or "Virginia")
@@ -1835,17 +1770,7 @@ class WorkdayHandler {
           
           if (valueToFill) {
             console.log(`  🔵 Attempting to fill "${label}" with: "${valueToFill}"`);
-            
-            // For state fields that are INPUT elements, use fillCustomDropdown (the working method)
-            let filled = false;
-            if (searchText.includes('state') && input.tagName === 'INPUT') {
-              filled = await this.fillCustomDropdown(input, valueToFill);
-            } else if (input.tagName === 'SELECT') {
-              filled = await this.fillSelectDropdown(input, valueToFill);
-            } else {
-              filled = await this.fillField(input, valueToFill);
-            }
-            
+            const filled = await this.fillField(input, valueToFill);
             if (filled) {
               filledCount++;
               console.log(`  ✅ Filled "${label}" with: "${valueToFill}"`);
@@ -1874,19 +1799,6 @@ class WorkdayHandler {
         await this.saveJobToTracker(jobInfo);
       }
 
-      // Final debug: Check all field values
-      console.log('🔵 Final field values check:');
-      Object.keys(this.fields).forEach(key => {
-        const field = this.fields[key];
-        if (field && field.element) {
-          const value = field.element.value || '';
-          const expected = data[key] || '';
-          const match = value === expected || (value.length > 0 && expected.length > 0);
-          console.log(`  ${match ? '✅' : '❌'} ${key}: "${value}" ${match ? '' : `(expected: "${expected}")`}`);
-        }
-      });
-
-      console.log(`✅ Autofill complete. Filled ${filledCount} fields.`);
       return { success: true, filledCount: filledCount };
     } catch (error) {
       console.error('Workday autofill error:', error);
@@ -2233,215 +2145,6 @@ class WorkdayHandler {
     return char;
   }
 
-  // Specialized method for filling state dropdowns in Workday
-  // Workday uses custom dropdowns where you type the state name and select from filtered options
-  async fillStateDropdown(element, state) {
-    try {
-      console.log(`🔵 Filling state dropdown with: "${state}"`);
-      
-      // State mapping for abbreviation <-> full name conversion
-      const stateMap = {
-        'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
-        'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
-        'DC': 'District of Columbia', 'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii',
-        'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
-        'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine',
-        'MD': 'Maryland', 'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota',
-        'MS': 'Mississippi', 'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska',
-        'NV': 'Nevada', 'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico',
-        'NY': 'New York', 'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio',
-        'OK': 'Oklahoma', 'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island',
-        'SC': 'South Carolina', 'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas',
-        'UT': 'Utah', 'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington',
-        'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming'
-      };
-      
-      // Reverse map (full name -> abbreviation)
-      const reverseStateMap = {};
-      for (const [abbr, full] of Object.entries(stateMap)) {
-        reverseStateMap[full.toLowerCase()] = abbr;
-      }
-      
-      // Normalize input - could be abbreviation or full name
-      let searchValue = state.trim();
-      const upperState = searchValue.toUpperCase();
-      
-      // If it's an abbreviation, get full name
-      if (stateMap[upperState]) {
-        searchValue = stateMap[upperState];
-      }
-      
-      console.log(`  Searching for state: "${searchValue}"`);
-      
-      // Focus and click the element to open dropdown
-      element.focus();
-      await this.delay(100);
-      
-      // Click to open dropdown (Workday often needs a click, not just focus)
-      element.click();
-      await this.delay(200); // Wait for dropdown to open
-      
-      // Clear any existing value
-      this.setNativeInputValue(element, '');
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      await this.delay(100);
-      
-      // Type the state name character by character to trigger filtering
-      console.log(`  📝 Typing state name: "${searchValue}"`);
-      for (let i = 0; i < searchValue.length; i++) {
-        const char = searchValue[i];
-        this.setNativeInputValue(element, searchValue.substring(0, i + 1));
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        await this.delay(50); // Small delay between characters
-      }
-      
-      // Also dispatch change event
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      await this.delay(300); // Wait for dropdown to filter and show options
-      
-      // Press ArrowDown to highlight the first matching option
-      console.log(`  ⬇️ Pressing ArrowDown to select first match`);
-      const downEvent = new KeyboardEvent('keydown', {
-        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true, cancelable: true
-      });
-      element.dispatchEvent(downEvent);
-      element.dispatchEvent(new KeyboardEvent('keyup', {
-        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true
-      }));
-      await this.delay(100);
-      
-      // Press Enter to select
-      console.log(`  ⏎ Pressing Enter to confirm selection`);
-      const enterDown = new KeyboardEvent('keydown', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-      });
-      element.dispatchEvent(enterDown);
-      
-      const enterPress = new KeyboardEvent('keypress', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
-      });
-      element.dispatchEvent(enterPress);
-      
-      const enterUp = new KeyboardEvent('keyup', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-      });
-      element.dispatchEvent(enterUp);
-      
-      await this.delay(200); // Wait for selection to complete
-      
-      // Check if selection worked
-      const finalValue = element.value;
-      console.log(`  Final value: "${finalValue}"`);
-      
-      if (finalValue && (
-        finalValue.toLowerCase().includes(searchValue.toLowerCase().substring(0, 3)) ||
-        finalValue.toUpperCase() === upperState
-      )) {
-        console.log(`  ✅ State selected successfully`);
-        return true;
-      }
-      
-      // Fallback: Try clicking on dropdown option directly
-      console.log(`  ⚠️ Enter didn't work, trying to click dropdown option...`);
-      
-      // Wait a bit more for dropdown to fully render
-      await this.delay(200);
-      
-      // Look for dropdown options with multiple selectors (Workday uses various patterns)
-      const dropdownSelectors = [
-        '[role="option"]',
-        '[data-automation-id*="option"]',
-        '[data-automation-id*="state"]',
-        'li[class*="option"]',
-        'div[class*="option"]',
-        'div[class*="menu-item"]',
-        'div[class*="list-item"]',
-        'span[class*="option"]',
-        // Workday-specific patterns
-        '[class*="css-"][role="option"]',
-        'div[aria-selected]',
-        'li[aria-selected]'
-      ];
-      
-      let dropdownOptions = [];
-      for (const selector of dropdownSelectors) {
-        const options = document.querySelectorAll(selector);
-        if (options.length > 0) {
-          console.log(`  Found ${options.length} options with selector: ${selector}`);
-          dropdownOptions = Array.from(options);
-          break;
-        }
-      }
-      
-      // If still no options, search more broadly
-      if (dropdownOptions.length === 0) {
-        console.log(`  Searching more broadly for dropdown options...`);
-        // Look for any visible elements that might be dropdown options
-        const allElements = document.querySelectorAll('div, li, span');
-        dropdownOptions = Array.from(allElements).filter(el => {
-          const style = window.getComputedStyle(el);
-          const isVisible = el.offsetParent !== null && 
-                          style.display !== 'none' && 
-                          style.visibility !== 'hidden';
-          const hasText = (el.textContent || '').trim().length > 0;
-          return isVisible && hasText;
-        });
-        console.log(`  Found ${dropdownOptions.length} potential options`);
-      }
-      
-      // Try to find and click matching option
-      for (const option of dropdownOptions) {
-        const optionText = (option.textContent || '').trim();
-        const optionTextLower = optionText.toLowerCase();
-        const searchLower = searchValue.toLowerCase();
-        const stateAbbr = stateMap[upperState] ? upperState : '';
-        
-        // Match if text contains state name, equals abbreviation, or equals full name
-        const matches = optionTextLower.includes(searchLower) || 
-                       optionText.toUpperCase() === stateAbbr ||
-                       optionTextLower === searchLower ||
-                       optionTextLower === (stateMap[upperState] || '').toLowerCase();
-        
-        if (matches) {
-          console.log(`  Found matching option: "${optionText}"`);
-          
-          // Scroll into view
-          option.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await this.delay(100);
-          
-          // Try multiple click methods
-          option.click();
-          await this.delay(100);
-          
-          // Also try mousedown/mouseup
-          const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
-          const mouseUp = new MouseEvent('mouseup', { bubbles: true, cancelable: true });
-          const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
-          option.dispatchEvent(mouseDown);
-          await this.delay(50);
-          option.dispatchEvent(mouseUp);
-          await this.delay(50);
-          option.dispatchEvent(clickEvent);
-          await this.delay(150);
-          
-          // Check if it worked
-          const afterClick = element.value || element.textContent || '';
-          if (afterClick && afterClick.length > 0) {
-            console.log(`  ✅ State selected via click: "${afterClick}"`);
-            return true;
-          }
-        }
-      }
-      
-      console.warn(`  ⚠️ Could not select state`);
-      return false;
-    } catch (error) {
-      console.error('Error in fillStateDropdown:', error);
-      return false;
-    }
-  }
-
   // Fill standard <select> dropdown
   async fillSelectDropdown(selectElement, value) {
     try {
@@ -2702,161 +2405,64 @@ class WorkdayHandler {
       
       // First, focus the element
       element.focus();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Then click the trigger
       trigger.click();
-      await new Promise(resolve => setTimeout(resolve, 300)); // Wait longer for dropdown to open
+      await new Promise(resolve => setTimeout(resolve, 200)); // Optimized for speed
       
-      // Verify dropdown is open by checking for visible options
-      let dropdownOpen = false;
-      const quickCheckSelectors = ['[role="listbox"]', '[role="menu"]', '[aria-expanded="true"]', '[data-automation-id*="menu"]'];
-      for (const selector of quickCheckSelectors) {
-        const check = document.querySelector(selector);
-        if (check && (check.offsetParent !== null || window.getComputedStyle(check).display !== 'none')) {
-          dropdownOpen = true;
-          console.log('  ✅ Dropdown appears to be open');
-          break;
-        }
-      }
-      
-      // If dropdown doesn't seem open, try clicking again
-      if (!dropdownOpen) {
-        console.log('  ⚠️ Dropdown may not be open, clicking again...');
-        trigger.click();
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      // For INPUT elements, type the value to filter options, then select
-      if (element.tagName === 'INPUT') {
-        console.log(`  📝 Typing value into input field: "${value}"`);
-        
-        // Clear the input first
-        this.setNativeInputValue(element, '');
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        await this.delay(100);
-        
-        // Type the value character by character for more realistic interaction (especially for state dropdowns)
-        const valueToType = value.trim();
-        for (let i = 0; i < valueToType.length; i++) {
-          const char = valueToType[i];
-          this.setNativeInputValue(element, valueToType.substring(0, i + 1));
+        // For INPUT elements, type the value to filter options, then press Enter
+        if (element.tagName === 'INPUT') {
+          console.log(`  📝 Typing value into input field: "${value}"`);
+          
+          // Clear the input first
+          this.setNativeInputValue(element, '');
           element.dispatchEvent(new Event('input', { bubbles: true }));
-          await this.delay(50); // Small delay between characters
-        }
-        
-        // Also dispatch change event
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        await this.delay(300); // Wait longer for dropdown to filter and show options
-        
-        // For state dropdowns, try ArrowDown then Enter to select first match
-        console.log(`  ⬇️ Pressing ArrowDown to highlight first option`);
-        const downEvent = new KeyboardEvent('keydown', {
-          key: 'ArrowDown',
-          code: 'ArrowDown',
-          keyCode: 40,
-          which: 40,
-          bubbles: true,
-          cancelable: true
-        });
-        element.dispatchEvent(downEvent);
-        element.dispatchEvent(new KeyboardEvent('keyup', {
-          key: 'ArrowDown',
-          code: 'ArrowDown',
-          keyCode: 40,
-          which: 40,
-          bubbles: true
-        }));
-        await this.delay(100);
-        
-        // Press Enter to select the highlighted option
-        console.log(`  ⏎ Pressing Enter to select option`);
-        const enterDown = new KeyboardEvent('keydown', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true
-        });
-        element.dispatchEvent(enterDown);
-        
-        const enterPress = new KeyboardEvent('keypress', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true
-        });
-        element.dispatchEvent(enterPress);
-        
-        const enterUp = new KeyboardEvent('keyup', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true
-        });
-        element.dispatchEvent(enterUp);
-        
-        await this.delay(200); // Wait longer for selection to complete
-        
-        // Verify the selection worked
-        const finalValue = element.value || element.textContent || '';
-        console.log(`  ✅ Final value after Enter: "${finalValue}"`);
-        
-        // More flexible matching - check if value contains state name or abbreviation
-        const valueLower = value.toLowerCase();
-        const finalLower = finalValue.toLowerCase();
-        const valueUpper = value.toUpperCase();
-        const finalUpper = finalValue.toUpperCase();
-        
-        // State abbreviation mapping for better matching
-        const stateMap = {
-          'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
-          'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
-          'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
-          'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
-          'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
-          'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
-          'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
-          'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
-          'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
-          'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
-          'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
-          'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
-          'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia'
-        };
-        
-        let matched = false;
-        if (finalValue && finalValue.length > 0) {
-          // Check exact match
-          if (finalLower === valueLower || finalUpper === valueUpper) {
-            matched = true;
-          }
-          // Check if final value contains the search value (or vice versa)
-          else if (finalLower.includes(valueLower) || valueLower.includes(finalLower)) {
-            matched = true;
-          }
-          // Check state abbreviation mapping
-          else if (stateMap[valueUpper] && finalLower.includes(stateMap[valueUpper].toLowerCase())) {
-            matched = true;
-          }
-          else if (stateMap[valueUpper] && stateMap[valueUpper].toLowerCase().includes(finalLower)) {
-            matched = true;
+          await this.delay(100);
+          
+          // Type the value to filter the dropdown
+          this.setNativeInputValue(element, value);
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          await this.delay(300); // Wait for dropdown to filter
+          
+          // Press Enter to select the first/matched option
+          console.log(`  ⏎ Pressing Enter to select option`);
+          const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true
+          });
+          element.dispatchEvent(enterEvent);
+          
+          // Also dispatch keyup for completeness
+          const enterUpEvent = new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true
+          });
+          element.dispatchEvent(enterUpEvent);
+          
+          await this.delay(200); // Wait for selection to complete
+          
+          // Verify the selection worked
+          const finalValue = element.value;
+          console.log(`  ✅ Final value after Enter: "${finalValue}"`);
+          
+          if (finalValue && finalValue.toLowerCase().includes(value.toLowerCase().substring(0, 10))) {
+            console.log(`  ✅ Successfully selected option by typing and pressing Enter`);
+            return true;
+          } else {
+            console.log(`  ⚠️ Enter selection may not have worked, falling back to click method`);
+            // Continue to click method below as fallback
           }
         }
-        
-        if (matched) {
-          console.log(`  ✅ Successfully selected option by typing and pressing Enter`);
-          return true;
-        } else {
-          console.log(`  ⚠️ Enter selection may not have worked, will try clicking option directly`);
-          // Continue to click method below as fallback
-        }
-      }
       
       // Look for dropdown menu/options - expanded list for Workday
       const dropdownSelectors = [

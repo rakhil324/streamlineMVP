@@ -38,13 +38,11 @@ export default function JobDetailPage() {
           return;
         }
         const data = await response.json();
-        if (data.success) {
-          const foundJob = (data.jobs || []).find((j: Job) => j.id === jobId);
-          if (foundJob) {
-            setJob(foundJob);
-          } else {
-            setError('Job not found');
-          }
+        const foundJob = (data.jobs || []).find((j: Job) => j.id === jobId);
+        if (foundJob) {
+          setJob(foundJob);
+        } else {
+          setError('Job not found');
         }
       } catch (err) {
         console.error('Error fetching job:', err);

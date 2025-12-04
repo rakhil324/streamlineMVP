@@ -1853,12 +1853,8 @@ async function autofillForm() {
         try {
           console.log('Streamline: Generating LLM answer for checkbox:', checkboxQuestionText);
           
-          // Get resume data from profile
+          // Get resume data from profile (optional - API can work without it)
           const resumeData = profile.resumeText || '';
-          if (!resumeData) {
-            console.log('Streamline: Could not fetch resume data, skipping LLM answer for checkbox');
-            return;
-          }
           
           // Generate LLM answer for this checkbox question
           const answer = await generateLLMAnswer(checkboxQuestionText, jobInfo, resumeData);
@@ -2030,12 +2026,8 @@ async function autofillForm() {
         console.log('Streamline: Generating LLM answer for:', questionText);
         showNotification('Generating answer...', 'info');
         
-        // Get resume data from profile
+        // Get resume data from profile (optional - API can work without it)
         const resumeData = profile.resumeText || '';
-        if (!resumeData) {
-          console.log('Streamline: Could not fetch resume data, skipping LLM answer');
-          continue;
-        }
         
         // Generate LLM answer for this question
         const answer = await generateLLMAnswer(questionText, jobInfo, resumeData);
