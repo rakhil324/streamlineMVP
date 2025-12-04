@@ -292,24 +292,49 @@ function isWorkAuthorizationQuestion(field) {
   const allIdentifiers = field.identifiers?.join(' ') || '';
   
   // Check all identifiers for work authorization keywords
-  const allText = [label, id, name, placeholder, allIdentifiers].join(' ');
+  const allText = [label, id, name, placeholder, allIdentifiers].join(' ').toLowerCase();
   
-  const isMatch = allText.includes('authoriz') ||
-         allText.includes('sponsorship') ||
-         allText.includes('visa') ||
-         (allText.includes('work') && (allText.includes('us') || allText.includes('united states'))) ||
-         allText.includes('legally authorized') ||
-         allText.includes('require visa') ||
-         allText.includes('visa sponsorship') ||
-         allText.includes('do you now or in the future require') ||
-         allText.includes('are you legally authorized') ||
-         allText.includes('are you legally') ||
-         (allText.includes('legally') && allText.includes('authorized'));
+  const workAuthPatterns = [
+    // Authorization patterns
+    /authoriz/i,
+    /legally.*work/i,
+    /work.*legally/i,
+    /eligible.*work/i,
+    /work.*eligible/i,
+    /permitted.*work/i,
+    /right to work/i,
+    /employment eligibility/i,
+    /work permit/i,
+    /work status/i,
+    // Sponsorship patterns
+    /sponsorship/i,
+    /sponsor/i,
+    /require.*visa/i,
+    /visa.*require/i,
+    /need.*visa/i,
+    /visa.*need/i,
+    /h-?1b/i,
+    /h1-?b/i,
+    /work visa/i,
+    /employment visa/i,
+    // Citizenship patterns
+    /citizen/i,
+    /permanent resident/i,
+    /green card/i,
+    /immigration status/i,
+    /us person/i,
+    /u\.s\. person/i,
+    // Common question patterns
+    /now or in the future/i,
+    /present or future/i,
+  ];
+  
+  const isMatch = workAuthPatterns.some(pattern => pattern.test(allText));
   
   if (isMatch) {
     console.log('Streamline: isWorkAuthorizationQuestion matched', {
       label: field.label,
-      allText: allText.substring(0, 200) // First 200 chars for debugging
+      allText: allText.substring(0, 200)
     });
   }
   
@@ -327,28 +352,267 @@ function getWorkAuthorizationValue(field) {
   const allIdentifiers = field.identifiers?.join(' ') || '';
   
   // Check all identifiers for work authorization keywords
-  const allText = [label, id, name, placeholder, allIdentifiers].join(' ');
+  const allText = [label, id, name, placeholder, allIdentifiers].join(' ').toLowerCase();
   
-  // Sponsorship question -> "No"
-  // Match: "Do you now or in the future require visa sponsorship to continue working in the United States?"
-  if (allText.includes('require visa') || 
-      allText.includes('sponsorship') ||
-      allText.includes('do you now or in the future require')) {
+  // Sponsorship question -> "No" (don't require sponsorship)
+  // Match: "Do you now or in the future require visa sponsorship?"
+  // Match: "Will you require sponsorship?"
+  // Match: "Do you need visa sponsorship?"
+  const sponsorshipPatterns = [
+    /require.*sponsorship/i,
+    /need.*sponsorship/i,
+    /sponsorship.*require/i,
+    /sponsorship.*need/i,
+    /require.*visa/i,
+    /need.*visa/i,
+    /now or in the future.*require/i,
+    /present or future.*require/i,
+    /will you.*require/i,
+    /do you.*require/i,
+    /will you need/i,
+  ];
+  
+  if (sponsorshipPatterns.some(pattern => pattern.test(allText))) {
     return 'No';
   }
   
-  // Authorization question -> "Yes"
+  // Authorization question -> "Yes" (authorized to work)
   // Match: "Are you legally authorized to work in the United States?"
-  // Also match variations like "Are you legally authorized" or just "legally authorized"
-  if (allText.includes('legally authorized') || 
-      allText.includes('authorized to work') ||
-      allText.includes('are you legally authorized') ||
-      (allText.includes('legally') && allText.includes('authorized')) ||
-      (allText.includes('authorized') && allText.includes('work') && (allText.includes('united states') || allText.includes('us')))) {
+  // Match: "Are you eligible to work?"
+  // Match: "Do you have the right to work?"
+  const authorizationPatterns = [
+    /legally authorized/i,
+    /authorized to work/i,
+    /eligible to work/i,
+    /permitted to work/i,
+    /right to work/i,
+    /lawfully.*work/i,
+    /can you work/i,
+    /are you.*citizen/i,
+    /us citizen/i,
+    /permanent resident/i,
+    /employment eligibility/i,
+    /work permit/i,
+  ];
+  
+  if (authorizationPatterns.some(pattern => pattern.test(allText))) {
+    return 'Yes';
+  }
+  
+  // Generic work auth question - default to Yes
+  if (allText.includes('authoriz') || allText.includes('work') && allText.includes('us')) {
     return 'Yes';
   }
   
   return null;
+}
+
+// Check if field is a location-based yes/no question
+function isLocationQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  // Match patterns like "Do you live in [City]?" or "Are you located in [City]?"
+  const locationPatterns = [
+    // Living/residing patterns
+    /do you live in/i,
+    /do you currently live/i,
+    /are you living in/i,
+    /do you reside in/i,
+    /are you a resident of/i,
+    /resident of/i,
+    // Location patterns
+    /are you located in/i,
+    /are you currently located/i,
+    /are you based in/i,
+    /are you currently in/i,
+    /location.*in/i,
+    // Work location patterns
+    /can you work from/i,
+    /will you be working from/i,
+    /able to work from/i,
+    /work onsite in/i,
+    /work on-site in/i,
+    /commute to/i,
+    /commuting distance/i,
+    // City/area specific
+    /within .* miles/i,
+    /within .* km/i,
+    /metro area/i,
+    /bay area/i,
+    /greater .* area/i,
+  ];
+  
+  const isMatch = locationPatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isLocationQuestion matched', {
+      label: field.label,
+      allText: allText.substring(0, 200)
+    });
+  }
+  
+  return isMatch;
+}
+
+// Get location-based answer based on user's profile location
+function getLocationBasedValue(field, profile) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  // Get user's location info from profile
+  const userCity = (profile?.city || '').toLowerCase();
+  const userState = (profile?.state || '').toLowerCase();
+  const userLocation = (profile?.location || '').toLowerCase();
+  
+  console.log('Streamline: Checking location question against profile', {
+    question: allText.substring(0, 100),
+    userCity,
+    userState,
+    userLocation
+  });
+  
+  // Handle relocation questions - default to Yes (willing to relocate)
+  if (allText.includes('relocate') || allText.includes('relocation') || 
+      allText.includes('willing to move') || allText.includes('open to moving')) {
+    console.log('Streamline: Relocation question - answering Yes');
+    return 'Yes';
+  }
+  
+  // Extract the city/location mentioned in the question using multiple patterns
+  const locationExtractPatterns = [
+    /(?:live in|living in|reside in|resident of|located in|based in|currently in|work from|working from|work onsite in|work on-site in|commute to)\s+([a-z\s\-\.]+?)(?:\?|,|\.|$|area)/i,
+    /(?:the|greater)\s+([a-z\s\-\.]+?)\s*(?:area|metro|region)/i,
+    /within .* (?:miles|km) of\s+([a-z\s\-\.]+?)(?:\?|,|\.|$)/i,
+  ];
+  
+  let questionLocation = null;
+  for (const pattern of locationExtractPatterns) {
+    const match = allText.match(pattern);
+    if (match) {
+      questionLocation = match[1].trim().toLowerCase();
+      // Clean up common suffixes
+      questionLocation = questionLocation.replace(/\s*(area|metro|region|office)$/i, '').trim();
+      break;
+    }
+  }
+  
+  if (questionLocation) {
+    console.log('Streamline: Question asks about location:', questionLocation);
+    
+    // Check if user's location matches (flexible matching)
+    const userLocationMatches = 
+      userCity.includes(questionLocation) || 
+      questionLocation.includes(userCity) ||
+      userState.includes(questionLocation) ||
+      questionLocation.includes(userState) ||
+      userLocation.includes(questionLocation) ||
+      questionLocation.includes(userLocation) ||
+      // Handle abbreviated vs full state names
+      (questionLocation === 'sf' && (userCity.includes('san francisco') || userLocation.includes('san francisco'))) ||
+      (questionLocation === 'nyc' && (userCity.includes('new york') || userLocation.includes('new york'))) ||
+      (questionLocation === 'la' && (userCity.includes('los angeles') || userLocation.includes('los angeles')));
+    
+    if (userLocationMatches) {
+      console.log('Streamline: User location MATCHES question location - answering Yes');
+      return 'Yes';
+    } else {
+      console.log('Streamline: User location DOES NOT match question location - answering No');
+      return 'No';
+    }
+  }
+  
+  // If we couldn't extract a specific location, skip and let other handlers deal with it
+  console.log('Streamline: Could not extract location from question - skipping auto-answer');
+  return null;
+}
+
+// Check if field is a veteran status question
+function isVeteranQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  const veteranPatterns = [
+    /veteran/i,
+    /military/i,
+    /armed forces/i,
+    /served in/i,
+    /active duty/i,
+    /national guard/i,
+    /reserves/i,
+    /us army/i,
+    /us navy/i,
+    /us marine/i,
+    /us air force/i,
+    /us coast guard/i,
+    /space force/i,
+    /protected veteran/i,
+    /service member/i,
+    /discharged/i,
+    /military service/i,
+  ];
+  
+  const isMatch = veteranPatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isVeteranQuestion matched', {
+      label: field.label,
+      allText: allText.substring(0, 200)
+    });
+  }
+  
+  return isMatch;
+}
+
+// Check if field is a disability status question
+function isDisabilityQuestion(field) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  const disabilityPatterns = [
+    /disability/i,
+    /disabled/i,
+    /handicap/i,
+    /impairment/i,
+    /accommodation/i,
+    /ada /i,
+    /americans with disabilities/i,
+    /special needs/i,
+    /physical limitation/i,
+    /mental health condition/i,
+    /chronic condition/i,
+    /medical condition/i,
+  ];
+  
+  const isMatch = disabilityPatterns.some(pattern => pattern.test(allText));
+  
+  if (isMatch) {
+    console.log('Streamline: isDisabilityQuestion matched', {
+      label: field.label,
+      allText: allText.substring(0, 200)
+    });
+  }
+  
+  return isMatch;
+}
+
+// Get value for veteran/disability questions - always "No" or decline to answer
+function getVeteranDisabilityValue(field) {
+  const label = field.label?.toLowerCase() || '';
+  const allIdentifiers = field.identifiers?.join(' ')?.toLowerCase() || '';
+  const allText = label + ' ' + allIdentifiers;
+  
+  // Check if there's a "decline" or "prefer not" option available
+  // For now, default to "No" - the dropdown filler will try to find the best match
+  console.log('Streamline: Veteran/Disability question - answering No/Decline');
+  
+  // Return array of preferred answers in order of preference
+  // The dropdown filler should try these in order
+  return ['No', 'I do not wish to answer', 'Decline to self-identify', 'Prefer not to say', 'N/A'];
 }
 
 // Fill dropdown field (for React Select or custom dropdowns)
@@ -1639,11 +1903,11 @@ async function autofillForm() {
       }
     });
     
-    // Process dropdown fields sequentially with delays to avoid conflicts
+    // Process dropdown fields sequentially with a short delay to avoid conflicts
     const processDropdownField = async (field, index) => {
       // Wait before processing to allow previous dropdowns to close
       if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between dropdowns
+        await new Promise(resolve => setTimeout(resolve, 150)); // short delay between dropdowns
       }
       
       // Close any open dropdowns before opening a new one
@@ -1672,6 +1936,163 @@ async function autofillForm() {
         field.element.getAttribute('aria-controls') ||
         field.element.getAttribute('aria-owns')
       );
+      
+      // Check for location-based questions FIRST (before work authorization)
+      if (isLocationQuestion(field)) {
+        console.log('Streamline: Location question detected', {
+          label: field.label,
+          isNativeSelect: isNativeSelect,
+          isCustomSelect: isCustomSelect
+        });
+        
+        const locationValue = getLocationBasedValue(field, profile);
+        if (locationValue) {
+          console.log('Streamline: Location-based answer:', locationValue);
+          
+          if (isNativeSelect) {
+            const options = Array.from(field.element.options);
+            const targetLower = locationValue.toLowerCase();
+            let targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === targetLower || optText.startsWith(targetLower);
+            });
+            
+            if (targetOption) {
+              field.element.value = targetOption.value;
+              field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled location question:', field.label, 'with:', locationValue);
+            }
+          } else {
+            const filled = await fillDropdownField(field.element, locationValue, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled location question (dropdown):', field.label);
+            }
+          }
+          return; // Skip further processing for this field
+        }
+        // If no location value determined, fall through to other handlers
+      }
+      
+      // Check for veteran status questions - answer No/Decline
+      if (isVeteranQuestion(field)) {
+        console.log('Streamline: Veteran question detected', {
+          label: field.label,
+          isNativeSelect: isNativeSelect,
+          isCustomSelect: isCustomSelect
+        });
+        
+        const preferredAnswers = getVeteranDisabilityValue(field);
+        let filled = false;
+        
+        if (isNativeSelect) {
+          const options = Array.from(field.element.options);
+          let targetOption = null;
+          
+          // Try each preferred answer in order
+          for (const answer of preferredAnswers) {
+            const answerLower = answer.toLowerCase();
+            targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === answerLower || optText.includes(answerLower) || answerLower.includes(optText);
+            });
+            if (targetOption) break;
+          }
+          
+          // Also try "not a" patterns (e.g., "I am not a protected veteran")
+          if (!targetOption) {
+            targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText.includes('not a') || optText.includes('i am not') || optText.includes('do not');
+            });
+          }
+          
+          if (targetOption) {
+            field.element.value = targetOption.value;
+            field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            filledCount++;
+            filledFields.push(field.label);
+            filled = true;
+            console.log('Streamline: Successfully filled veteran question:', field.label, 'with:', targetOption.text);
+          }
+        } else {
+          // Try each preferred answer for custom dropdowns
+          for (const answer of preferredAnswers) {
+            filled = await fillDropdownField(field.element, answer, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled veteran question (dropdown):', field.label);
+              break;
+            }
+          }
+        }
+        
+        if (filled) return;
+        // If couldn't fill, fall through to other handlers
+      }
+      
+      // Check for disability status questions - answer No/Decline
+      if (isDisabilityQuestion(field)) {
+        console.log('Streamline: Disability question detected', {
+          label: field.label,
+          isNativeSelect: isNativeSelect,
+          isCustomSelect: isCustomSelect
+        });
+        
+        const preferredAnswers = getVeteranDisabilityValue(field);
+        let filled = false;
+        
+        if (isNativeSelect) {
+          const options = Array.from(field.element.options);
+          let targetOption = null;
+          
+          // Try each preferred answer in order
+          for (const answer of preferredAnswers) {
+            const answerLower = answer.toLowerCase();
+            targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText === answerLower || optText.includes(answerLower) || answerLower.includes(optText);
+            });
+            if (targetOption) break;
+          }
+          
+          // Also try "do not have" patterns
+          if (!targetOption) {
+            targetOption = options.find(opt => {
+              const optText = (opt.text || opt.textContent || '').toLowerCase().trim();
+              return optText.includes('do not have') || optText.includes('don\'t have') || 
+                     optText.includes('i do not') || optText.includes('no, i do not');
+            });
+          }
+          
+          if (targetOption) {
+            field.element.value = targetOption.value;
+            field.element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            filledCount++;
+            filledFields.push(field.label);
+            filled = true;
+            console.log('Streamline: Successfully filled disability question:', field.label, 'with:', targetOption.text);
+          }
+        } else {
+          // Try each preferred answer for custom dropdowns
+          for (const answer of preferredAnswers) {
+            filled = await fillDropdownField(field.element, answer, field);
+            if (filled) {
+              filledCount++;
+              filledFields.push(field.label);
+              console.log('Streamline: Successfully filled disability question (dropdown):', field.label);
+              break;
+            }
+          }
+        }
+        
+        if (filled) return;
+        // If couldn't fill, fall through to other handlers
+      }
       
       if (isWorkAuthorizationQuestion(field)) {
         console.log('Streamline: Work authorization question detected', {
