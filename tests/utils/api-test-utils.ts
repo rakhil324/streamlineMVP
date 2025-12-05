@@ -42,7 +42,7 @@ export function createMockNextRequest(options: MockRequestOptions = {}): NextReq
     (init.headers as Headers).set('Content-Type', 'application/json');
   }
 
-  return new NextRequest(urlObj.toString(), init);
+  return new NextRequest(urlObj.toString(), init as any);
 }
 
 /**

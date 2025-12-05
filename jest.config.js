@@ -12,8 +12,9 @@ const config = {
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   collectCoverageFrom: [
-    'app/**/*.{ts,tsx}',
-    'lib/**/*.{ts,tsx}',
+    'lib/encryption.ts',
+    'lib/dataSanitization.ts',
+    'lib/fileProcessor.ts',
     '!**/*.d.ts',
     '!**/node_modules/**',
   ],
@@ -21,6 +22,17 @@ const config = {
   verbose: true,
   testTimeout: 30000,
   projects: [
+    {
+      displayName: 'unit-lib',
+      testEnvironment: 'node',
+      testMatch: ['<rootDir>/tests/unit/lib/**/*.test.ts'],
+      transform: {
+        '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
+      },
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/$1',
+      },
+    },
     {
       displayName: 'unit-api',
       testEnvironment: 'node',

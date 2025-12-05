@@ -4,10 +4,82 @@
  * Falls back to PDFKit if compilation fails
  */
 
-import { generatePDFFromResume } from './pdfGeneratorStructured';
+import { generatePDF } from './pdfGenerator';
 import { Resume } from './resumeTypes';
 
 const LATEX_ONLINE_URL = 'https://latexonline.cc/compile';
+
+/**
+ * Converts a Resume object to plain text for PDF generation fallback
+ */
+function resumeToText(resume: Resume): string {
+  const lines: string[] = [];
+  
+  // Header
+  if (resume.header) {
+    if (resume.header.name) lines.push(resume.header.name);
+    const contact: string[] = [];
+    if (resume.header.email) contact.push(resume.header.email);
+    if (resume.header.phone) contact.push(resume.header.phone);
+    if (resume.header.location) contact.push(resume.header.location);
+    if (contact.length > 0) lines.push(contact.join(' | '));
+    lines.push('');
+  }
+  
+  // Education
+  if (resume.education && resume.education.length > 0) {
+    lines.push('EDUCATION');
+    for (const edu of resume.education) {
+      lines.push(`${edu.degree} - ${edu.institution}`);
+      if (edu.gradDate) lines.push(edu.gradDate);
+      if (edu.gpa) lines.push(`GPA: ${edu.gpa}`);
+      lines.push('');
+    }
+  }
+  
+  // Experience
+  if (resume.experience && resume.experience.length > 0) {
+    lines.push('EXPERIENCE');
+    for (const exp of resume.experience) {
+      lines.push(`${exp.title} at ${exp.company}`);
+      if (exp.location) lines.push(exp.location);
+      if (exp.start && exp.end) lines.push(`${exp.start} - ${exp.end}`);
+      if (exp.bullets) {
+        for (const bullet of exp.bullets) {
+          lines.push(`• ${bullet}`);
+        }
+      }
+      lines.push('');
+    }
+  }
+  
+  // Extracurriculars
+  if (resume.extracurriculars && resume.extracurriculars.length > 0) {
+    lines.push('EXTRACURRICULAR ACTIVITIES');
+    for (const ext of resume.extracurriculars) {
+      lines.push(`${ext.role} at ${ext.org}`);
+      if (ext.start && ext.end) lines.push(`${ext.start} - ${ext.end}`);
+      if (ext.bullets) {
+        for (const bullet of ext.bullets) {
+          lines.push(`• ${bullet}`);
+        }
+      }
+      lines.push('');
+    }
+  }
+  
+  // Skills
+  if (resume.skillsAndInterests) {
+    lines.push('SKILLS & INTERESTS');
+    if (resume.skillsAndInterests.skills) lines.push(`Skills: ${resume.skillsAndInterests.skills}`);
+    if (resume.skillsAndInterests.frameworks) lines.push(`Frameworks: ${resume.skillsAndInterests.frameworks}`);
+    if (resume.skillsAndInterests.tools) lines.push(`Tools: ${resume.skillsAndInterests.tools}`);
+    if (resume.skillsAndInterests.interests) lines.push(`Interests: ${resume.skillsAndInterests.interests}`);
+    lines.push('');
+  }
+  
+  return lines.join('\n');
+}
 
 /**
  * Compiles LaTeX to PDF using the free latex-online.cc API
@@ -115,7 +187,9 @@ export async function compileToPdf(
   // Fallback to PDFKit
   if (fallbackResume) {
     console.log('Using PDFKit fallback...');
-    const pdf = await generatePDFFromResume(fallbackResume, 'resume.pdf');
+    // Convert resume to text format for PDF generation
+    const resumeText = resumeToText(fallbackResume);
+    const pdf = await generatePDF(resumeText, 'resume.pdf');
     return { pdf, method: 'pdfkit' };
   }
   

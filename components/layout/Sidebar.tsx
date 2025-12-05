@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, Sparkles, Settings, User, LogOut } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 

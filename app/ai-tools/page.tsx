@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { Sparkles, FileText, MessageSquare, Zap, Loader2, CheckCircle, Download, X, Play, RotateCcw, Search, Building2, Upload, AlertCircle, Copy } from 'lucide-react';
+import { Sparkles, FileText, MessageSquare, Loader2, CheckCircle, Download, X, RotateCcw, Building2, AlertCircle } from 'lucide-react';
 import { Job } from '@/lib/mockData';
 
 export default function AIToolsPage() {
@@ -42,20 +42,11 @@ export default function AIToolsPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  interface InterviewQuestion {
-    question: string;
-    answer: string;
-    status: 'pending' | 'answered';
-  }
-
   const [generatedContent, setGeneratedContent] = useState<{
     resume?: string;
     coverLetter?: string;
-    interviewQuestions?: InterviewQuestion[];
     selectedJobId?: string;
     pdfBase64?: string;
-    tailoredData?: any;
-    originalData?: any;
   }>({});
 
   const tools = [
@@ -74,32 +65,6 @@ export default function AIToolsPage() {
       description: 'Generate personalized cover letters in seconds',
       action: 'Write Cover Letter',
       requiresJob: true,
-    },
-    {
-      id: 'interview',
-      icon: <Zap className="w-8 h-8" />,
-      title: 'Interview Prep',
-      description: 'Practice with AI interview questions and get feedback',
-      action: 'Start Practice',
-      requiresJob: false,
-    },
-  ];
-
-  const mockInterviewQuestions: InterviewQuestion[] = [
-    {
-      question: "Tell me about a challenging project you worked on and how you overcame obstacles.",
-      answer: "I led a project to rebuild our main application using React. The challenge was migrating legacy code while maintaining functionality. I created a phased migration plan, built a component library for consistency, and collaborated closely with the backend team.",
-      status: 'pending',
-    },
-    {
-      question: "How do you stay updated with the latest frontend technologies?",
-      answer: "I regularly read technical blogs, contribute to open-source projects, and attend conferences. I also experiment with new frameworks in side projects to understand their strengths and use cases.",
-      status: 'pending',
-    },
-    {
-      question: "Describe a time when you had to optimize a slow-performing application.",
-      answer: "I identified performance bottlenecks using React DevTools and Chrome Profiler. I implemented code splitting, lazy loading, and memoization strategies that reduced initial load time by 60% and improved user experience significantly.",
-      status: 'pending',
     },
   ];
 
@@ -417,13 +382,6 @@ export default function AIToolsPage() {
           pdfBase64: data.pdf || undefined,
           selectedJobId: job.id 
         }));
-      } else if (toolId === 'interview') {
-        // Keep mock for interview prep for now
-        setTimeout(() => {
-          setGenerating(null);
-          setCurrentStep(0);
-        setGeneratedContent(prev => ({ ...prev, interviewQuestions: mockInterviewQuestions }));
-        }, steps.length * 500 + 500);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to generate content');
@@ -486,11 +444,6 @@ export default function AIToolsPage() {
     } else if (toolId === 'cover') {
       setGeneratedContent(prev => {
         const { coverLetter, selectedJobId, pdfBase64, ...rest } = prev;
-        return rest;
-      });
-    } else if (toolId === 'interview') {
-      setGeneratedContent(prev => {
-        const { interviewQuestions, ...rest } = prev;
         return rest;
       });
     }
@@ -827,14 +780,6 @@ export default function AIToolsPage() {
                 >
                   View Cover Letter
                 </Button>
-              ) : generatedContent.interviewQuestions && tool.id === 'interview' ? (
-                <Button
-                  variant="primary"
-                  onClick={() => setActiveTool('interview')}
-                  className="w-full"
-                >
-                  View Questions
-                </Button>
               ) : (
                 <Button
                   variant="primary"
@@ -970,63 +915,6 @@ export default function AIToolsPage() {
           </Card>
         )}
 
-        {/* Interview Prep Demo */}
-        {activeTool === 'interview' && generatedContent.interviewQuestions && (
-          <Card className="relative">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-textPrimary">Interview Practice Questions</h3>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleReset('interview')}
-                  className="flex items-center gap-2"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Reset
-                </Button>
-                <button
-                  onClick={() => setActiveTool(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="space-y-4">
-              {generatedContent.interviewQuestions.map((item, index) => (
-                <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-primary bg-opacity-10 rounded-full flex items-center justify-center text-primary font-semibold text-sm">
-                        {index + 1}
-                      </div>
-                      <h4 className="font-semibold text-textPrimary">Question {index + 1}</h4>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                    >
-                      <Play className="w-4 h-4" />
-                      Practice
-                    </Button>
-                  </div>
-                  <p className="text-sm text-textPrimary mb-3 font-medium">
-                    {item.question}
-                  </p>
-                  <div className="bg-white rounded-lg p-3 border border-gray-200">
-                    <p className="text-xs text-textSecondary mb-2 font-medium">Sample Answer:</p>
-                    <p className="text-sm text-textSecondary leading-relaxed">
-                      {item.answer}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
         {/* How It Works Section */}
         {!activeTool && !showJobSelector && (
           <Card>
@@ -1039,7 +927,7 @@ export default function AIToolsPage() {
                   </div>
                   <h4 className="font-medium text-textPrimary mb-1">Select a Tool</h4>
                   <p className="text-sm text-textSecondary">
-                    Choose from resume builder, cover letter writer, or interview prep
+                    Choose from resume builder or cover letter writer
                   </p>
                 </div>
                 <div className="text-center">

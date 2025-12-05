@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, User, LogOut, LayoutDashboard, Search, CheckSquare, Bookmark, Sparkles, Settings } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, CheckSquare, Sparkles, Settings } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', path: '/', icon: LayoutDashboard },

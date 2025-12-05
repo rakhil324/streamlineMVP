@@ -167,11 +167,11 @@ function preserveProtectedSections(tailored: FlexibleResume, original: FlexibleR
   });
   
   // Ensure no sections were dropped
-  for (const [name, section] of protectedOriginals) {
+  protectedOriginals.forEach((section, name) => {
     if (!tailored.sections.find(s => s.name === name)) {
       tailored.sections.push(section);
     }
-  }
+  });
   
   return tailored;
 }
